@@ -1,0 +1,18 @@
+{
+  "images" : [
+    {
+      "filename" : "OpenEyeIcon.png",
+      "idiom" : "mac",
+      "scale" : "1x"
+    },
+    {
+      "filename" : "OpenEyeIcon 1.png",
+      "idiom" : "mac",
+      "scale" : "2x"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}
