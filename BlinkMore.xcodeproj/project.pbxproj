@@ -35,16 +35,6 @@
 			path = BlinkMore;
 			sourceTree = "<group>";
 		};
-		39FED0812D6CB0E30053C840 /* BlinkMoreTests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = BlinkMoreTests;
-			sourceTree = "<group>";
-		};
-		39FED08B2D6CB0E30053C840 /* BlinkMoreUITests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = BlinkMoreUITests;
-			sourceTree = "<group>";
-		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -76,8 +66,6 @@
 			isa = PBXGroup;
 			children = (
 				39FED06F2D6CB0E20053C840 /* BlinkMore */,
-				39FED0812D6CB0E30053C840 /* BlinkMoreTests */,
-				39FED08B2D6CB0E30053C840 /* BlinkMoreUITests */,
 				39FED06E2D6CB0E20053C840 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -130,9 +118,6 @@
 			dependencies = (
 				39FED0802D6CB0E30053C840 /* PBXTargetDependency */,
 			);
-			fileSystemSynchronizedGroups = (
-				39FED0812D6CB0E30053C840 /* BlinkMoreTests */,
-			);
 			name = BlinkMoreTests;
 			packageProductDependencies = (
 			);
@@ -152,9 +137,6 @@
 			);
 			dependencies = (
 				39FED08A2D6CB0E30053C840 /* PBXTargetDependency */,
-			);
-			fileSystemSynchronizedGroups = (
-				39FED08B2D6CB0E30053C840 /* BlinkMoreUITests */,
 			);
 			name = BlinkMoreUITests;
 			packageProductDependencies = (

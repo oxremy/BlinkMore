@@ -20,9 +20,7 @@ BlinkMore is a lightweight macOS menu bar application that helps reduce eye stra
 
 ## Installation
 
-1. Download the latest release from the [Releases](https://github.com/oxremy/BlinkMore/releases) page
-2. Move BlinkMore.app to your Applications folder
-3. Launch the app
+1. See Devlopment section below.
 
 On first launch, the app will request camera access if you wish to use the eye-tracking feature.
 
