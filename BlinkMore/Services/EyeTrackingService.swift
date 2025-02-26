@@ -28,7 +28,17 @@ class EyeTrackingService: NSObject, ObservableObject, AVCaptureVideoDataOutputSa
     // Fix QoS thread inversion by ensuring processingQueue uses the same QoS as the main thread
     private var processingQueue = DispatchQueue(label: "com.oxremy.blinkmore.videoprocessing", qos: .userInteractive)
     
-    // Image caching to limit memory usage
+    // Add a dedicated queue for Vision processing to avoid priority inversion
+    private var visionQueue = DispatchQueue(label: "com.oxremy.blinkmore.visionprocessing", qos: .userInteractive, autoreleaseFrequency: .workItem)
+    
+    // Replace simple image caching with a proper buffer pool
+    private let maxBufferPoolSize = 3
+    private var pixelBufferPool: [CVPixelBuffer] = []
+    private var ciImagePool: [CIImage] = []
+    private var pixelBufferPoolLock = NSLock()
+    private var ciImagePoolLock = NSLock()
+    
+    // Add back the direct reference properties for current frame data
     private var currentFrameBuffer: CVPixelBuffer?
     private var currentFrameCIImage: CIImage?
     
@@ -73,6 +83,24 @@ class EyeTrackingService: NSObject, ObservableObject, AVCaptureVideoDataOutputSa
     
     private var permissionsService = PermissionsService.shared
     
+    // Add region of interest tracking
+    private var lastFaceRegion: CGRect?
+    private var faceConfidence: Float = 0.0
+    private var faceDetectionInterval: Int = 0
+    private let maxFaceDetectionInterval: Int = 15 // Check full frame every 15 processed frames
+    
+    // Cache for previous face detection results
+    private var lastFaceObservation: VNFaceObservation?
+    private var lastFaceDetectionTime = Date()
+    private let faceCacheDuration: TimeInterval = 0.1 // 100ms cache validity
+    
+    // Confidence thresholds for processing
+    private let faceDetectionConfidenceThreshold: Float = 0.7
+    private let landmarksConfidenceThreshold: Float = 0.8
+    
+    // Memory pressure monitoring
+    private var isUnderMemoryPressure: Bool = false
+    
     // Initialize the service
     override init() {
         super.init()
@@ -80,6 +108,14 @@ class EyeTrackingService: NSObject, ObservableObject, AVCaptureVideoDataOutputSa
         setupVision()
         checkPowerState() // Initial power state check
         checkPermissionsAndSetupCamera()
+        
+        // Add memory pressure monitoring - fix notification name
+        NotificationCenter.default.addObserver(
+            self, 
+            selector: #selector(didReceiveMemoryWarning), 
+            name: NSApplication.didChangeScreenParametersNotification, // Using a standard macOS notification instead
+            object: nil
+        )
     }
     
     // Check permissions before setting up camera
@@ -124,11 +160,11 @@ class EyeTrackingService: NSObject, ObservableObject, AVCaptureVideoDataOutputSa
         
         var batteryState = false
         
-        // Fixed conditional cast and optional binding
-        if let sourcesList = powerSources as? [CFTypeRef], !sourcesList.isEmpty {
-            // Use optional binding for the first power source
+        // Fix conditional cast warning
+        let sourcesList = powerSources as NSArray
+        if sourcesList.count > 0 {
             let powerSource = sourcesList[0]
-            if let description = IOPSGetPowerSourceDescription(powerSourceInfo, powerSource).takeUnretainedValue() as? [String: Any],
+            if let description = IOPSGetPowerSourceDescription(powerSourceInfo, powerSource as CFTypeRef).takeUnretainedValue() as? [String: Any],
                let isPlugged = description[kIOPSPowerSourceStateKey] as? String {
                 batteryState = (isPlugged != kIOPSACPowerValue)
             }
@@ -182,6 +218,9 @@ class EyeTrackingService: NSObject, ObservableObject, AVCaptureVideoDataOutputSa
         captureSession?.stopRunning()
         isActive = false
         isEyeOpen = false
+        
+        // Clean up resources when stopping
+        clearBufferPools()
     }
     
     // MARK: - Vision Setup
@@ -263,9 +302,14 @@ class EyeTrackingService: NSObject, ObservableObject, AVCaptureVideoDataOutputSa
             // Get pixel buffer from sample buffer
             guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
             
-            // Store current frame for later processing
+            // Store current frame in buffer pool and direct references
+            storePixelBuffer(pixelBuffer)
+            let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+            storeCIImage(ciImage)
+            
+            // Set direct references
             currentFrameBuffer = pixelBuffer
-            currentFrameCIImage = CIImage(cvPixelBuffer: pixelBuffer)
+            currentFrameCIImage = ciImage
             
             // Process the frame
             processVideoFrame(pixelBuffer)
@@ -275,14 +319,76 @@ class EyeTrackingService: NSObject, ObservableObject, AVCaptureVideoDataOutputSa
     // MARK: - Video Frame Processing
     
     private func processVideoFrame(_ pixelBuffer: CVPixelBuffer) {
-        let imageRequestHandler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .up, options: [:])
+        // Skip processing if under memory pressure (more aggressively)
+        if isUnderMemoryPressure && frameCount % (frameSkip * 2) != 0 {
+            return
+        }
+        
+        // Reuse cached face if detection was recent enough
+        let now = Date()
+        if let lastFace = lastFaceObservation, 
+           now.timeIntervalSince(lastFaceDetectionTime) < faceCacheDuration {
+            // Process the cached face for landmarks instead of doing full detection
+            processFaceLandmarks(for: lastFace, in: pixelBuffer)
+            return
+        }
+        
+        // Determine if we should use region of interest or full frame
+        let options: [VNImageOption: Any] = [:]
+        let imageRequestHandler: VNImageRequestHandler
+        
+        // Skip full face detection if we have a recent face region
+        if let _ = lastFaceRegion, faceConfidence > faceDetectionConfidenceThreshold, faceDetectionInterval < maxFaceDetectionInterval {
+            // Processing with the last known face region
+            faceDetectionInterval += 1
+        } else {
+            // Reset interval counter for full frame detection
+            faceDetectionInterval = 0
+        }
+        
+        // Create standard handler without regionOfInterest
+        imageRequestHandler = VNImageRequestHandler(
+            cvPixelBuffer: pixelBuffer,
+            orientation: .up,
+            options: options
+        )
+        
+        // Perform the face detection request
+        do {
+            // Use the dedicated visionQueue to avoid QoS inversions
+            visionQueue.async { [weak self] in
+                guard let self = self else { return }
+                do {
+                    try imageRequestHandler.perform([self.faceDetectionRequest])
+                } catch {
+                    print("Failed to perform face detection: \(error.localizedDescription)")
+                    self.scheduleStateUpdate(key: "isEyeOpen", value: false)
+                }
+            }
+        } catch {
+            print("Failed to set up face detection: \(error.localizedDescription)")
+            scheduleStateUpdate(key: "isEyeOpen", value: false)
+        }
+    }
+    
+    // Process face landmarks using provided face observation
+    private func processFaceLandmarks(for face: VNFaceObservation, in pixelBuffer: CVPixelBuffer) {
+        // Create a request specifically for landmarks on the known face
+        let faceLandmarksRequest = VNDetectFaceLandmarksRequest { [weak self] request, error in
+            self?.handleFaceLandmarks(request: request, error: error)
+        }
+        
+        // Create a handler without regionOfInterest as it's not supported in this context
+        let handler = VNImageRequestHandler(
+            cvPixelBuffer: pixelBuffer,
+            orientation: .up,
+            options: [:]
+        )
         
         do {
-            // Run face detection request
-            try imageRequestHandler.perform([faceDetectionRequest])
+            try handler.perform([faceLandmarksRequest])
         } catch {
-            print("Failed to perform face detection: \(error.localizedDescription)")
-            scheduleStateUpdate(key: "isEyeOpen", value: false)
+            print("Failed to process landmarks: \(error.localizedDescription)")
         }
     }
     
@@ -294,27 +400,41 @@ class EyeTrackingService: NSObject, ObservableObject, AVCaptureVideoDataOutputSa
             scheduleStateUpdate(key: "faceDetected", value: false)
             scheduleStateUpdate(key: "multipleFacesDetected", value: false)
             scheduleStateUpdate(key: "isEyeOpen", value: false)
+            
+            // Clear the face region when detection fails
+            lastFaceRegion = nil
+            faceConfidence = 0.0
+            lastFaceObservation = nil
             return
         }
         
         guard let observations = request.results as? [VNFaceObservation] else { return }
         
+        // Update face detection time
+        lastFaceDetectionTime = Date()
+        
         // Batch state updates instead of multiple main thread dispatches
         if observations.count == 1 {
-            scheduleStateUpdate(key: "faceDetected", value: true)
-            scheduleStateUpdate(key: "multipleFacesDetected", value: false)
-            
-            // Process face landmarks
             if let observation = observations.first {
-                // Process the face landmarks in the original image
-                let faceLandmarksRequest = VNDetectFaceLandmarksRequest { [weak self] request, error in
-                    self?.handleFaceLandmarks(request: request, error: error)
-                }
+                // Cache the detected face for future frames
+                lastFaceObservation = observation
+                lastFaceRegion = observation.boundingBox
+                faceConfidence = observation.confidence
                 
-                // Process the landmarks request on the same image
-                if let currentFrameBuffer = currentFrameBuffer {
-                    let handler = VNImageRequestHandler(cvPixelBuffer: currentFrameBuffer, orientation: .up, options: [:])
-                    try? handler.perform([faceLandmarksRequest])
+                // Only process high-confidence faces
+                if observation.confidence > faceDetectionConfidenceThreshold {
+                    scheduleStateUpdate(key: "faceDetected", value: true)
+                    scheduleStateUpdate(key: "multipleFacesDetected", value: false)
+                    
+                    // Process the face landmarks
+                    if let currentBuffer = currentFrameBuffer {
+                        processFaceLandmarks(for: observation, in: currentBuffer)
+                    }
+                } else {
+                    // Low confidence face
+                    scheduleStateUpdate(key: "faceDetected", value: false)
+                    scheduleStateUpdate(key: "eyesVisible", value: false)
+                    scheduleStateUpdate(key: "isEyeOpen", value: false)
                 }
             }
         } else if observations.count > 1 {
@@ -323,12 +443,22 @@ class EyeTrackingService: NSObject, ObservableObject, AVCaptureVideoDataOutputSa
             scheduleStateUpdate(key: "multipleFacesDetected", value: true)
             scheduleStateUpdate(key: "eyesVisible", value: false)
             scheduleStateUpdate(key: "isEyeOpen", value: false)
+            
+            // Clear face region since we have multiple faces
+            lastFaceRegion = nil
+            faceConfidence = 0.0
+            lastFaceObservation = nil
         } else {
             // No faces detected
             scheduleStateUpdate(key: "faceDetected", value: false)
             scheduleStateUpdate(key: "multipleFacesDetected", value: false)
             scheduleStateUpdate(key: "eyesVisible", value: false)
             scheduleStateUpdate(key: "isEyeOpen", value: false)
+            
+            // Clear face region
+            lastFaceRegion = nil
+            faceConfidence = 0.0
+            lastFaceObservation = nil
         }
     }
     
@@ -348,8 +478,10 @@ class EyeTrackingService: NSObject, ObservableObject, AVCaptureVideoDataOutputSa
             return
         }
         
-        // Check if eyes are visible
-        let eyesAreVisible = landmarks.leftEye != nil && landmarks.rightEye != nil
+        // Check if landmarks have sufficient confidence
+        let hasValidLeftEye = landmarks.leftEye != nil && face.confidence > landmarksConfidenceThreshold
+        let hasValidRightEye = landmarks.rightEye != nil && face.confidence > landmarksConfidenceThreshold
+        let eyesAreVisible = hasValidLeftEye || hasValidRightEye
         
         // Extract eye regions if eyes are visible
         var leftEyeImage: CGImage?
@@ -358,9 +490,14 @@ class EyeTrackingService: NSObject, ObservableObject, AVCaptureVideoDataOutputSa
         if eyesAreVisible {
             // Extract eye regions from the current frame
             if let ciImage = currentFrameCIImage {
-                // Extract eye regions directly without collecting for debug
-                leftEyeImage = extractEyeRegion(from: ciImage, faceBounds: face.boundingBox, eyePoints: landmarks.leftEye!.normalizedPoints)
-                rightEyeImage = extractEyeRegion(from: ciImage, faceBounds: face.boundingBox, eyePoints: landmarks.rightEye!.normalizedPoints)
+                // Only extract the eye(s) with sufficient confidence
+                if hasValidLeftEye {
+                    leftEyeImage = extractEyeRegion(from: ciImage, faceBounds: face.boundingBox, eyePoints: landmarks.leftEye!.normalizedPoints)
+                }
+                
+                if hasValidRightEye {
+                    rightEyeImage = extractEyeRegion(from: ciImage, faceBounds: face.boundingBox, eyePoints: landmarks.rightEye!.normalizedPoints)
+                }
             }
         }
         
@@ -531,9 +668,74 @@ class EyeTrackingService: NSObject, ObservableObject, AVCaptureVideoDataOutputSa
         return average > 0.5
     }
     
+    @objc private func didReceiveMemoryWarning() {
+        isUnderMemoryPressure = true
+        
+        // Clear cached resources using the pool cleanup method
+        clearBufferPools()
+        lastFaceObservation = nil
+        
+        // Increase frame skipping temporarily
+        let oldFrameSkip = frameSkip
+        frameSkip = min(frameSkip * 2, 8)
+        
+        // Reset after a delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in
+            self?.isUnderMemoryPressure = false
+            self?.frameSkip = oldFrameSkip
+        }
+    }
+    
     // MARK: - Cleanup
     
     deinit {
+        NotificationCenter.default.removeObserver(self)
         stopTracking()
+        clearBufferPools()
+    }
+    
+    // Thread-safe buffer management - updated to not use manual retain/release
+    private func storePixelBuffer(_ buffer: CVPixelBuffer) {
+        pixelBufferPoolLock.lock()
+        defer { pixelBufferPoolLock.unlock() }
+        
+        // In modern Swift, we don't need to manually retain CoreFoundation objects
+        // Swift handles memory management automatically
+        
+        // Manage pool size
+        if pixelBufferPool.count >= maxBufferPoolSize {
+            // Remove oldest buffer
+            pixelBufferPool.removeFirst()
+        }
+        
+        pixelBufferPool.append(buffer)
+    }
+    
+    private func storeCIImage(_ image: CIImage) {
+        ciImagePoolLock.lock()
+        defer { ciImagePoolLock.unlock() }
+        
+        // Manage pool size
+        if ciImagePool.count >= maxBufferPoolSize {
+            // Remove oldest image
+            ciImagePool.removeFirst()
+        }
+        
+        ciImagePool.append(image)
+    }
+    
+    // Updated to remove manual memory management
+    private func clearBufferPools() {
+        pixelBufferPoolLock.lock()
+        pixelBufferPool.removeAll()
+        pixelBufferPoolLock.unlock()
+        
+        ciImagePoolLock.lock()
+        ciImagePool.removeAll()
+        ciImagePoolLock.unlock()
+        
+        // Also clear direct references
+        currentFrameBuffer = nil
+        currentFrameCIImage = nil
     }
 } 

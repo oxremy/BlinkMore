@@ -53,7 +53,7 @@ struct PreferencesView: View {
                 
                 ColorPicker("Select Fade Color", selection: $selectedColor)
                     .labelsHidden()
-                    .onChange(of: selectedColor) { newValue in
+                    .onChange(of: selectedColor) { oldValue, newValue in
                         preferences.fadeColor = NSColor(newValue)
                     }
             }
@@ -62,7 +62,7 @@ struct PreferencesView: View {
             VStack(alignment: .leading) {
                 Toggle("Enable Eye Tracking", isOn: $eyeTrackingEnabled)
                     .disabled(isCameraAccessDenied)
-                    .onChange(of: eyeTrackingEnabled) { newValue in
+                    .onChange(of: eyeTrackingEnabled) { oldValue, newValue in
                         if newValue {
                             permissions.checkCameraAccess { granted in
                                 DispatchQueue.main.async {
