@@ -33,7 +33,11 @@ class PreferencesWindowController: NSWindowController {
     override func showWindow(_ sender: Any?) {
         super.showWindow(sender)
         window?.center()
-        window?.makeKeyAndOrderFront(sender)
+        
+        // First activate the app
         NSApp.activate(ignoringOtherApps: true)
+        
+        // Then make the window key and bring it to front
+        window?.makeKeyAndOrderFront(sender)
     }
 } 

@@ -22,10 +22,6 @@ struct PreferencesView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            Text("BlinkMore Preferences")
-                .font(.headline)
-                .padding(.bottom, 10)
-            
             // Fade Speed Slider
             VStack(alignment: .leading) {
                 Text("Fade Speed: \(Int(preferences.fadeSpeed)) seconds")

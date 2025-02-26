@@ -15,6 +15,7 @@ class FadeScreenMenuItemView: NSView {
     private var fadeService = FadeService.shared
     private var trackingArea: NSTrackingArea?
     private var isPressed = false
+    private var isHovered = false
     
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -55,54 +56,128 @@ class FadeScreenMenuItemView: NSView {
         super.mouseDown(with: event)
         isPressed = true
         fadeService.applyFade()
+        needsDisplay = true
     }
     
     override func mouseUp(with event: NSEvent) {
         super.mouseUp(with: event)
         isPressed = false
         fadeService.removeFade()
+        needsDisplay = true
     }
     
     override func mouseDragged(with event: NSEvent) {
         super.mouseDragged(with: event)
         // If mouse dragged outside the view, consider it a mouse up
         let location = convert(event.locationInWindow, from: nil)
-        if !bounds.contains(location) && isPressed {
-            isPressed = false
-            fadeService.removeFade()
+        let wasPressed = isPressed
+        isPressed = bounds.contains(location) && wasPressed
+        
+        if wasPressed != isPressed {
+            needsDisplay = true
+            if !isPressed {
+                fadeService.removeFade()
+            }
         }
+    }
+    
+    override func mouseEntered(with event: NSEvent) {
+        super.mouseEntered(with: event)
+        isHovered = true
+        needsDisplay = true
     }
     
     override func mouseExited(with event: NSEvent) {
         super.mouseExited(with: event)
+        isHovered = false
         if isPressed {
             isPressed = false
             fadeService.removeFade()
         }
+        needsDisplay = true
     }
     
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         
+        // Define button appearance properties based on state
+        let buttonWidth = 120.0 // Narrower fixed width instead of full width
+        let centerX = (bounds.width - buttonWidth) / 2
+        let buttonRect = NSRect(
+            x: centerX,
+            y: bounds.origin.y + 2,
+            width: buttonWidth,
+            height: bounds.height - 4
+        )
+        
+        // Create button appearance
+        let buttonPath = NSBezierPath(roundedRect: buttonRect, xRadius: 6, yRadius: 6)
+        
+        // Set the button background color based on state
+        let backgroundColor: NSColor
+        if isPressed {
+            backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.7) // Darker when pressed
+        } else if isHovered {
+            backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.9) // Slightly highlighted when hovered
+        } else {
+            backgroundColor = NSColor.controlAccentColor // Normal state
+        }
+        
+        backgroundColor.setFill()
+        buttonPath.fill()
+        
+        // Create a slight inner shadow when pressed to give depth
+        if isPressed {
+            NSGraphicsContext.saveGraphicsState()
+            let shadowColor = NSColor.black.withAlphaComponent(0.2)
+            let shadow = NSShadow()
+            shadow.shadowColor = shadowColor
+            shadow.shadowOffset = NSSize(width: 0, height: -1)
+            shadow.shadowBlurRadius = 2
+            shadow.set()
+            buttonPath.fill()
+            NSGraphicsContext.restoreGraphicsState()
+        } else {
+            // Add a subtle outer shadow when not pressed
+            NSGraphicsContext.saveGraphicsState()
+            let shadowColor = NSColor.black.withAlphaComponent(0.2)
+            let shadow = NSShadow()
+            shadow.shadowColor = shadowColor
+            shadow.shadowOffset = NSSize(width: 0, height: 1)
+            shadow.shadowBlurRadius = 2
+            shadow.set()
+            buttonPath.fill()
+            NSGraphicsContext.restoreGraphicsState()
+        }
+        
+        // Set the text color to contrast with the button background
+        let textColor = NSColor.white
+        
+        // Draw button text
         let labelText = "Fade Screen"
-        let labelFont = NSFont.menuFont(ofSize: 13)
+        let labelFont = NSFont.systemFont(ofSize: 13, weight: .medium)
         let textAttributes: [NSAttributedString.Key: Any] = [
             .font: labelFont,
-            .foregroundColor: NSColor.labelColor
+            .foregroundColor: textColor
         ]
         
         let attributedString = NSAttributedString(string: labelText, attributes: textAttributes)
         let stringSize = attributedString.size()
         
-        // Center the text vertically and align left with some padding
+        // Center the text in the button
         let textRect = NSRect(
-            x: 20, // Left padding
+            x: (bounds.width - stringSize.width) / 2,
             y: (bounds.height - stringSize.height) / 2,
-            width: bounds.width - 25,
+            width: stringSize.width,
             height: stringSize.height
         )
         
-        attributedString.draw(in: textRect)
+        // Adjust text position slightly when pressed to enhance button press effect
+        let textDrawRect = isPressed ? 
+            NSRect(x: textRect.origin.x, y: textRect.origin.y - 1, width: textRect.width, height: textRect.height) : 
+            textRect
+        
+        attributedString.draw(in: textDrawRect)
     }
 }
 
@@ -144,27 +219,36 @@ class StatusBarController {
         menu = NSMenu()
         
         // Create custom view for "Fade Screen" menu item
-        let customView = FadeScreenMenuItemView(frame: NSRect(x: 0, y: 0, width: 200, height: 22))
+        let customView = FadeScreenMenuItemView(frame: NSRect(x: 0, y: 0, width: 200, height: 30))
         fadeScreenCustomMenuItem = NSMenuItem()
         fadeScreenCustomMenuItem.view = customView
         menu.addItem(fadeScreenCustomMenuItem)
         
         menu.addItem(NSMenuItem.separator())
         
-        let preferencesItem = NSMenuItem(title: "Preferences", action: #selector(openPreferences), keyEquivalent: ",")
+        // Create preferences menu item with larger text
+        let preferencesItem = NSMenuItem(title: "", action: #selector(openPreferences), keyEquivalent: ",")
+        let preferencesFont = NSFont.systemFont(ofSize: 16, weight: .medium) // Larger font size
+        let preferencesAttributes: [NSAttributedString.Key: Any] = [
+            .font: preferencesFont,
+            .foregroundColor: NSColor.labelColor
+        ]
+        let preferencesAttributedTitle = NSAttributedString(string: "Preferences", attributes: preferencesAttributes)
+        preferencesItem.attributedTitle = preferencesAttributedTitle
         preferencesItem.target = self
         menu.addItem(preferencesItem)
         
-        #if DEBUG
-        menu.addItem(NSMenuItem.separator())
-        let debugItem = NSMenuItem(title: "Toggle Debug Mode", action: #selector(toggleDebugMode), keyEquivalent: "d")
-        debugItem.target = self
-        menu.addItem(debugItem)
-        #endif
-        
         menu.addItem(NSMenuItem.separator())
         
-        let creditItem = NSMenuItem(title: "Made with ❤️ by oxremy", action: #selector(openGitHub), keyEquivalent: "")
+        // Create credit menu item with smaller text
+        let creditItem = NSMenuItem(title: "", action: #selector(openGitHub), keyEquivalent: "")
+        let creditFont = NSFont.systemFont(ofSize: 11, weight: .regular) // Smaller font size
+        let creditAttributes: [NSAttributedString.Key: Any] = [
+            .font: creditFont,
+            .foregroundColor: NSColor.labelColor
+        ]
+        let creditAttributedTitle = NSAttributedString(string: "Made with ❤️ by oxremy", attributes: creditAttributes)
+        creditItem.attributedTitle = creditAttributedTitle
         creditItem.target = self
         menu.addItem(creditItem)
         
@@ -249,27 +333,6 @@ class StatusBarController {
                 }
             }
             .store(in: &cancelBag)
-        
-        // Subscribe to tracking state for debugging (optional)
-        let faceDetectedPublisher = optionalPublisher(eyeTrackingService?.$faceDetected, defaultValue: false)
-        let multipleFacesPublisher = optionalPublisher(eyeTrackingService?.$multipleFacesDetected, defaultValue: false)
-        let eyesVisiblePublisher = optionalPublisher(eyeTrackingService?.$eyesVisible, defaultValue: false)
-        
-        Publishers.CombineLatest3(faceDetectedPublisher, multipleFacesPublisher, eyesVisiblePublisher)
-            .sink { [weak self] faceDetected, multipleFaces, eyesVisible in
-                // We could update the UI based on these states if needed
-                print("Face detection status: detected=\(faceDetected), multiple=\(multipleFaces), eyes visible=\(eyesVisible)")
-            }
-            .store(in: &cancelBag)
-    }
-    
-    // Helper method to handle optional publishers
-    private func optionalPublisher<T>(_ publisher: Published<T>.Publisher?, defaultValue: T) -> AnyPublisher<T, Never> {
-        if let publisher = publisher {
-            return publisher.eraseToAnyPublisher()
-        } else {
-            return Just(defaultValue).eraseToAnyPublisher()
-        }
     }
     
     @objc private func openPreferences() {
@@ -279,12 +342,6 @@ class StatusBarController {
     @objc private func openGitHub() {
         NSWorkspace.shared.open(Constants.authorURL)
     }
-    
-    #if DEBUG
-    @objc private func toggleDebugMode() {
-        eyeTrackingService?.toggleDebugMode()
-    }
-    #endif
 }
 
 // Placeholder for EyeTrackingService that will be implemented later has been removed

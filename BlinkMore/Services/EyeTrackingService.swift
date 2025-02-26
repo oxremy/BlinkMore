@@ -16,13 +16,10 @@ class EyeTrackingService: NSObject, ObservableObject, AVCaptureVideoDataOutputSa
     @Published var isEyeOpen: Bool = false
     @Published var isActive: Bool = false
     
-    // For debugging/development
-    @Published var faceDetected: Bool = false
-    @Published var multipleFacesDetected: Bool = false
-    @Published var eyesVisible: Bool = false
-    
-    private var simulationMode: Bool = false // Set to false to use real implementation
-    private var simulationTimer: Timer?
+    // These properties are still needed for internal state tracking, but not labeled as debug
+    private var faceDetected: Bool = false
+    private var multipleFacesDetected: Bool = false
+    private var eyesVisible: Bool = false
     
     // Video capture properties
     private var captureSession: AVCaptureSession?
@@ -57,22 +54,14 @@ class EyeTrackingService: NSObject, ObservableObject, AVCaptureVideoDataOutputSa
     private var lastEyeStateChangeTime = Date()
     private var simulatedEyeState: Double = 0.0 // 0 = closed, 1 = open
     
-    // Debug properties
-    private var debugMode: Bool = false
-    private var debugWindow: NSWindow?
-    private var debugImageView: NSImageView?
     private var permissionsService = PermissionsService.shared
     
     // Initialize the service
     override init() {
         super.init()
         
-        if simulationMode {
-            startSimulation()
-        } else {
-            setupVision()
-            checkPermissionsAndSetupCamera()
-        }
+        setupVision()
+        checkPermissionsAndSetupCamera()
     }
     
     // Check permissions before setting up camera
@@ -104,49 +93,22 @@ class EyeTrackingService: NSObject, ObservableObject, AVCaptureVideoDataOutputSa
     
     // Start the eye tracking
     func startTracking() {
-        if simulationMode {
-            startSimulation()
+        // Verify permissions before starting
+        let status = AVCaptureDevice.authorizationStatus(for: .video)
+        if status == .authorized {
+            self.captureSession?.startRunning()
+            isActive = true
         } else {
-            // Verify permissions before starting
-            let status = AVCaptureDevice.authorizationStatus(for: .video)
-            if status == .authorized {
-                self.captureSession?.startRunning()
-                isActive = true
-            } else {
-                // Try to request permissions again
-                checkPermissionsAndSetupCamera()
-            }
+            // Try to request permissions again
+            checkPermissionsAndSetupCamera()
         }
     }
     
     // Stop the eye tracking
     func stopTracking() {
-        if simulationMode {
-            simulationTimer?.invalidate()
-            simulationTimer = nil
-        } else {
-            captureSession?.stopRunning()
-        }
-        
+        captureSession?.stopRunning()
         isActive = false
         isEyeOpen = false
-    }
-    
-    // MARK: - Simulation Mode
-    
-    private func startSimulation() {
-        // Simulate eye tracking: eye closed by default, open every 10s for 5s
-        simulationTimer = Timer.scheduledTimer(withTimeInterval: 15.0, repeats: true) { [weak self] _ in
-            // Simulate eye open
-            self?.isEyeOpen = true
-            
-            // Simulate eye close after 5 seconds
-            DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
-                self?.isEyeOpen = false
-            }
-        }
-        
-        isActive = true
     }
     
     // MARK: - Vision Setup
@@ -312,32 +274,13 @@ class EyeTrackingService: NSObject, ObservableObject, AVCaptureVideoDataOutputSa
         var leftEyeImage: CGImage?
         var rightEyeImage: CGImage?
         
-        // For debugging: collect eye regions for visualization
-        var eyeRects: [CGRect] = []
-        
         if eyesAreVisible {
             // Extract eye regions from the current frame
             if let ciImage = currentFrameCIImage {
-                if let leftEyeRegion = calculateEyeRegion(faceBounds: face.boundingBox, eyePoints: landmarks.leftEye!.normalizedPoints, imageSize: ciImage.extent.size) {
-                    eyeRects.append(leftEyeRegion)
-                }
-                
-                if let rightEyeRegion = calculateEyeRegion(faceBounds: face.boundingBox, eyePoints: landmarks.rightEye!.normalizedPoints, imageSize: ciImage.extent.size) {
-                    eyeRects.append(rightEyeRegion)
-                }
-                
-                // Update debug view if in debug mode
-                if debugMode {
-                    updateDebugView(with: ciImage, eyeRects: eyeRects)
-                }
-                
-                // Continue with eye extraction
+                // Extract eye regions directly without collecting for debug
                 leftEyeImage = extractEyeRegion(from: ciImage, faceBounds: face.boundingBox, eyePoints: landmarks.leftEye!.normalizedPoints)
                 rightEyeImage = extractEyeRegion(from: ciImage, faceBounds: face.boundingBox, eyePoints: landmarks.rightEye!.normalizedPoints)
             }
-        } else if debugMode {
-            // Show current frame without rectangles if eyes not visible
-            updateDebugView(with: currentFrameCIImage)
         }
         
         DispatchQueue.main.async {
@@ -472,85 +415,6 @@ class EyeTrackingService: NSObject, ObservableObject, AVCaptureVideoDataOutputSa
         // Consider the eye open if the average is greater than 0.5
         // This means that if majority of recent frames show open eyes, we consider it open
         return average > 0.5
-    }
-    
-    // MARK: - Debug Functions
-    
-    func toggleDebugMode() {
-        debugMode = !debugMode
-        
-        if debugMode {
-            setupDebugWindow()
-        } else {
-            closeDebugWindow()
-        }
-    }
-    
-    private func setupDebugWindow() {
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 640, height: 480),
-            styleMask: [.titled, .closable, .resizable],
-            backing: .buffered,
-            defer: false
-        )
-        
-        window.title = "BlinkMore Eye Detection Debug"
-        window.center()
-        
-        let imageView = NSImageView(frame: NSRect(x: 0, y: 0, width: 640, height: 480))
-        imageView.imageScaling = .scaleProportionallyUpOrDown
-        
-        window.contentView = imageView
-        
-        self.debugWindow = window
-        self.debugImageView = imageView
-        
-        window.makeKeyAndOrderFront(nil)
-    }
-    
-    private func closeDebugWindow() {
-        debugWindow?.close()
-        debugWindow = nil
-        debugImageView = nil
-    }
-    
-    private func updateDebugView(with ciImage: CIImage?, eyeRects: [CGRect] = []) {
-        guard debugMode, let debugImageView = debugImageView, let ciImage = ciImage else { return }
-        
-        // Convert CIImage to CGImage
-        let context = CIContext(options: nil)
-        guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else { return }
-        
-        // Create NSImage
-        let nsImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
-        
-        // Draw eye rects if available
-        if !eyeRects.isEmpty {
-            nsImage.lockFocus()
-            
-            NSColor.red.setStroke()
-            let bezierPath = NSBezierPath()
-            bezierPath.lineWidth = 2.0
-            
-            for rect in eyeRects {
-                // Convert from CIImage coordinates to NSImage coordinates
-                let flippedRect = CGRect(
-                    x: rect.origin.x,
-                    y: CGFloat(cgImage.height) - rect.origin.y - rect.height,
-                    width: rect.width,
-                    height: rect.height
-                )
-                bezierPath.appendRect(flippedRect)
-            }
-            
-            bezierPath.stroke()
-            nsImage.unlockFocus()
-        }
-        
-        // Update image view on main thread
-        DispatchQueue.main.async {
-            debugImageView.image = nsImage
-        }
     }
     
     // MARK: - Cleanup
