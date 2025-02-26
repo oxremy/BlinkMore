@@ -29,9 +29,22 @@
 		39FED0882D6CB0E30053C840 /* BlinkMoreUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BlinkMoreUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		39121D962D6F5993000C9454 /* Exceptions for "BlinkMore" folder in "BlinkMore" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 39FED06C2D6CB0E20053C840 /* BlinkMore */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		39FED06F2D6CB0E20053C840 /* BlinkMore */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				39121D962D6F5993000C9454 /* Exceptions for "BlinkMore" folder in "BlinkMore" target */,
+			);
 			path = BlinkMore;
 			sourceTree = "<group>";
 		};

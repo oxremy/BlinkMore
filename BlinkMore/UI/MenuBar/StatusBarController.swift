@@ -100,8 +100,20 @@ class FadeScreenMenuItemView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         
-        // Define button appearance properties based on state
-        let buttonWidth = 120.0 // Narrower fixed width instead of full width
+        // Draw button text first to get its size
+        let labelText = "Fade Screen"
+        let labelFont = NSFont.systemFont(ofSize: 16, weight: .medium) // Increased to 16pt to match Preferences
+        let textAttributes: [NSAttributedString.Key: Any] = [
+            .font: labelFont,
+            .foregroundColor: NSColor.white
+        ]
+        
+        let attributedString = NSAttributedString(string: labelText, attributes: textAttributes)
+        let stringSize = attributedString.size()
+        
+        // Define button appearance properties based on the text size
+        let horizontalPadding = 20.0 // Padding on each side of the text
+        let buttonWidth = stringSize.width + (horizontalPadding * 2) // Width based on text size plus padding
         let centerX = (bounds.width - buttonWidth) / 2
         let buttonRect = NSRect(
             x: centerX,
@@ -150,24 +162,10 @@ class FadeScreenMenuItemView: NSView {
             NSGraphicsContext.restoreGraphicsState()
         }
         
-        // Set the text color to contrast with the button background
-        let textColor = NSColor.white
-        
-        // Draw button text
-        let labelText = "Fade Screen"
-        let labelFont = NSFont.systemFont(ofSize: 13, weight: .medium)
-        let textAttributes: [NSAttributedString.Key: Any] = [
-            .font: labelFont,
-            .foregroundColor: textColor
-        ]
-        
-        let attributedString = NSAttributedString(string: labelText, attributes: textAttributes)
-        let stringSize = attributedString.size()
-        
         // Center the text in the button
         let textRect = NSRect(
-            x: (bounds.width - stringSize.width) / 2,
-            y: (bounds.height - stringSize.height) / 2,
+            x: (buttonRect.width - stringSize.width) / 2 + buttonRect.origin.x,
+            y: (buttonRect.height - stringSize.height) / 2 + buttonRect.origin.y,
             width: stringSize.width,
             height: stringSize.height
         )
