@@ -21,11 +21,5 @@ struct BlinkMoreApp: App {
         Settings {
             EmptyView()
         }
-        .commands {
-            // Disable the automatic Preferences menu item since we handle it in our custom menu
-            CommandGroup(replacing: .appSettings) {
-                EmptyView()
-            }
-        }
     }
 }

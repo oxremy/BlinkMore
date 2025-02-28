@@ -67,9 +67,16 @@ class PreferencesService: ObservableObject {
             
         $fadeColor
             .dropFirst()
-            .sink { [weak self] newValue in
-                if let colorData = try? NSKeyedArchiver.archivedData(withRootObject: newValue, requiringSecureCoding: false) {
+            .sink { [weak self] newColor in
+                do {
+                    let colorData = try NSKeyedArchiver.archivedData(
+                        withRootObject: newColor,
+                        requiringSecureCoding: false
+                    )
                     self?.defaults.set(colorData, forKey: Constants.UserDefaultsKeys.fadeColor)
+                    print("Color saved to preferences: \(newColor)")
+                } catch {
+                    print("Failed to archive color: \(error)")
                 }
             }
             .store(in: &cancellables)

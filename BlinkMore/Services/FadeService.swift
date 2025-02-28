@@ -15,6 +15,7 @@ class FadeService: ObservableObject {
     @Published var isFaded: Bool = false
     private var fadeWindows: [NSWindow] = []
     private var preferencesService = PreferencesService.shared
+    private var cancellables = Set<AnyCancellable>()
     
     private init() {
         // Initialize fade windows for each screen
@@ -27,10 +28,22 @@ class FadeService: ObservableObject {
             name: NSApplication.didChangeScreenParametersNotification,
             object: nil
         )
+        
+        // Listen for color changes
+        preferencesService.$fadeColor
+            .dropFirst()
+            .sink { [weak self] newColor in
+                // If currently faded, update the color immediately
+                if self?.isFaded == true {
+                    self?.updateFadeColor(newColor)
+                }
+            }
+            .store(in: &cancellables)
     }
     
     deinit {
         NotificationCenter.default.removeObserver(self)
+        cancellables.removeAll()
     }
     
     @objc private func screensChanged() {
@@ -118,16 +131,47 @@ class FadeService: ObservableObject {
                 )
                 hostingView.rootView = newView
                 
-                // Hide window after animation completes
-                DispatchQueue.main.asyncAfter(deadline: .now() + Constants.fadeOutDuration + 0.05) {
-                    if !self.isFaded {
+                // Immediately update the window level to ensure it goes behind other windows
+                window.level = NSWindow.Level(Int(CGWindowLevelForKey(.normalWindow)) - 1)
+                
+                // Hide window after animation completes - use a shorter delay to ensure responsiveness
+                DispatchQueue.main.asyncAfter(deadline: .now() + Constants.fadeOutDuration + 0.01) { [weak self, weak window] in
+                    // Only hide if we're still in not-faded state
+                    guard let self = self, !self.isFaded, let window = window else { return }
+                    
+                    if window.isVisible {
                         window.orderOut(nil)
+                        print("Fade window hidden after animation completed")
                     }
                 }
+            } else {
+                // Fallback if hosting view is not available
+                print("Warning: Could not access FadeView - forcing window to hide")
+                window.alphaValue = 0
+                window.orderOut(nil)
             }
         }
         
         print("Removing fade with duration \(Constants.fadeOutDuration)")
+    }
+    
+    private func updateFadeColor(_ color: NSColor) {
+        fadeWindows.forEach { window in
+            if let hostingView = window.contentView as? NSHostingView<FadeView> {
+                // Get the current opacity value
+                let currentOpacity = hostingView.rootView.opacity
+                
+                // Create a new view with current opacity but new color
+                let newView = FadeView(
+                    opacity: .constant(currentOpacity), 
+                    color: color,
+                    animationDuration: 0.2 // Short animation for color change
+                )
+                hostingView.rootView = newView
+            }
+        }
+        
+        print("Updated fade color to \(color)")
     }
 }
 

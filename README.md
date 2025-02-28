@@ -1,12 +1,11 @@
 # BlinkMore
 
-BlinkMore is a lightweight macOS menu bar application that helps reduce eye strain by fading your screen to a customizable color when you stare at it for too long without blinking. It has two triggers: manual activation and automated eye-tracking.
+BlinkMore is a lightweight macOS menu bar application that helps reduce eye strain by fading your screen to a customizable color when you stare at it for too long without blinking. It uses automated eye-tracking.
 
 ## Features
 
 - **Menu Bar App**: Runs efficiently in the background with minimal resource usage
-- **Manual Fade**: Toggle screen fading with a single click or keyboard shortcut
-- **Automated Eye-Tracking**: Optional feature that monitors your blinking patterns and fades the screen automatically
+- **Automated Eye-Tracking**: Monitors your blinking patterns and fades the screen automatically
 - **Customizable Settings**:
   - Fade Speed: Adjust how quickly the screen fades (1-10 seconds)
   - Fade Color: Choose any color for the screen overlay
@@ -26,9 +25,7 @@ On first launch, the app will request camera access if you wish to use the eye-t
 
 ## Usage
 
-- **Fade Screen**: Click the menu bar icon and select "Fade Screen" to manually fade/unfade your screen
 - **Preferences**: Customize fade speed, color, threshold, and toggle eye-tracking
-- **Keyboard Shortcut**: Use ⌘F to toggle screen fade
 
 ## Privacy
 
