@@ -15,8 +15,8 @@ class MenuSliderView: NSView {
     private var titleLabel: NSTextField
     private var slider: NSSlider
     private var valueLabel: NSTextField
-    private var minLabel: NSTextField
-    private var maxLabel: NSTextField
+    private var minLabel: NSTextField?
+    private var maxLabel: NSTextField?
     private var unitText: String
     
     var value: Double {
@@ -46,7 +46,7 @@ class MenuSliderView: NSView {
         
         // Create the value label
         valueLabel = NSTextField(labelWithString: "")
-        valueLabel.font = NSFont.systemFont(ofSize: 12, weight: .regular)
+        valueLabel.font = NSFont.systemFont(ofSize: 14, weight: .regular)
         valueLabel.textColor = .secondaryLabelColor
         valueLabel.isEditable = false
         valueLabel.isSelectable = false
@@ -54,30 +54,11 @@ class MenuSliderView: NSView {
         valueLabel.backgroundColor = .clear
         valueLabel.alignment = .right
         
-        // Create min/max labels
-        minLabel = NSTextField(labelWithString: "\(Int(minValue))")
-        minLabel.font = NSFont.systemFont(ofSize: 10, weight: .regular)
-        minLabel.textColor = .tertiaryLabelColor
-        minLabel.isEditable = false
-        minLabel.isSelectable = false
-        minLabel.isBordered = false
-        minLabel.backgroundColor = .clear
-        
-        maxLabel = NSTextField(labelWithString: "\(Int(maxValue))")
-        maxLabel.font = NSFont.systemFont(ofSize: 10, weight: .regular)
-        maxLabel.textColor = .tertiaryLabelColor
-        maxLabel.isEditable = false
-        maxLabel.isSelectable = false
-        maxLabel.isBordered = false
-        maxLabel.backgroundColor = .clear
-        
         super.init(frame: frameRect)
         
         addSubview(titleLabel)
         addSubview(slider)
         addSubview(valueLabel)
-        addSubview(minLabel)
-        addSubview(maxLabel)
         
         slider.target = self
         
@@ -118,21 +99,6 @@ class MenuSliderView: NSView {
             y: bounds.height - 55,
             width: bounds.width - (padding * 2),
             height: 20
-        )
-        
-        // Position min/max labels
-        minLabel.frame = NSRect(
-            x: padding,
-            y: bounds.height - 75,
-            width: 20,
-            height: 15
-        )
-        
-        maxLabel.frame = NSRect(
-            x: bounds.width - padding - 20,
-            y: bounds.height - 75,
-            width: 20,
-            height: 15
         )
     }
     
@@ -435,17 +401,6 @@ class StatusBarController {
     }
     
     private func addPreferencesToMenu() {
-        // Add preference section title
-        let preferencesTitle = NSMenuItem(title: "Preferences", action: nil, keyEquivalent: "")
-        preferencesTitle.isEnabled = false
-        let titleFont = NSFont.systemFont(ofSize: 14, weight: .semibold)
-        let titleAttributes: [NSAttributedString.Key: Any] = [
-            .font: titleFont,
-            .foregroundColor: NSColor.labelColor
-        ]
-        preferencesTitle.attributedTitle = NSAttributedString(string: "Preferences", attributes: titleAttributes)
-        menu.addItem(preferencesTitle)
-        
         // Fade Speed slider
         let fadeSpeedItem = NSMenuItem()
         let fadeSpeedView = MenuSliderView(
@@ -504,11 +459,6 @@ class StatusBarController {
         eyeTrackingItem.target = self
         eyeTrackingItem.state = preferencesService.eyeTrackingEnabled ? .on : .off
         menu.addItem(eyeTrackingItem)
-        
-        // Reset to defaults button
-        let resetItem = NSMenuItem(title: "Reset to Defaults", action: #selector(resetToDefaults), keyEquivalent: "")
-        resetItem.target = self
-        menu.addItem(resetItem)
     }
     
     @objc private func toggleEyeTracking(_ sender: NSMenuItem) {
@@ -544,20 +494,6 @@ class StatusBarController {
             // Simply turn it off
             preferencesService.eyeTrackingEnabled = false
             sender.state = .off
-        }
-    }
-    
-    @objc private func resetToDefaults() {
-        preferencesService.resetToDefaults()
-        
-        // Update our UI elements
-        fadeSpeedView?.value = preferencesService.fadeSpeed
-        blinkThresholdView?.value = preferencesService.blinkThreshold
-        colorPickerView?.color = preferencesService.fadeColor
-        
-        // Update eye tracking menu item
-        if let eyeTrackingItem = menu.items.first(where: { $0.title == "Enable Eye Tracking" }) {
-            eyeTrackingItem.state = preferencesService.eyeTrackingEnabled ? .on : .off
         }
     }
     

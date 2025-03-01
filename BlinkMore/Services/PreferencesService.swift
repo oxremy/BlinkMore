@@ -98,12 +98,4 @@ class PreferencesService: ObservableObject {
     
     // Add a property to store cancellables
     private var cancellables = Set<AnyCancellable>()
-    
-    // Reset preferences to defaults
-    func resetToDefaults() {
-        fadeSpeed = Constants.defaultFadeSpeed
-        blinkThreshold = Constants.defaultBlinkThreshold
-        fadeColor = Constants.defaultFadeColor
-        eyeTrackingEnabled = Constants.defaultEyeTrackingEnabled
-    }
 } 
