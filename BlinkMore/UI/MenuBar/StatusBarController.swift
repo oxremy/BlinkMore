@@ -52,6 +52,7 @@ class MenuSliderView: NSView {
         valueLabel.isSelectable = false
         valueLabel.isBordered = false
         valueLabel.backgroundColor = .clear
+        valueLabel.alignment = .right
         
         // Create min/max labels
         minLabel = NSTextField(labelWithString: "\(Int(minValue))")
@@ -92,8 +93,8 @@ class MenuSliderView: NSView {
         super.layout()
         
         let padding: CGFloat = 10
-        let labelWidth: CGFloat = 120
-        let valueWidth: CGFloat = 50
+        let labelWidth: CGFloat = 170
+        let valueWidth: CGFloat = 40
         
         // Position title label
         titleLabel.frame = NSRect(
@@ -141,7 +142,7 @@ class MenuSliderView: NSView {
     }
     
     private func updateValueLabel() {
-        valueLabel.stringValue = "\(Int(slider.doubleValue)) \(unitText)"
+        valueLabel.stringValue = "\(Int(slider.doubleValue))s"
     }
 }
 
@@ -453,7 +454,7 @@ class StatusBarController {
             minValue: Constants.minFadeSpeed,
             maxValue: Constants.maxFadeSpeed,
             initialValue: preferencesService.fadeSpeed,
-            unitText: "seconds"
+            unitText: "s"
         )
         fadeSpeedView.onValueChanged = { [weak self] newValue in
             self?.preferencesService.fadeSpeed = newValue
@@ -466,11 +467,11 @@ class StatusBarController {
         let blinkThresholdItem = NSMenuItem()
         let blinkThresholdView = MenuSliderView(
             frame: NSRect(x: 0, y: 0, width: 280, height: 80),
-            title: "Blink Threshold",
+            title: "Time Between Blinks",
             minValue: Constants.minBlinkThreshold,
             maxValue: Constants.maxBlinkThreshold,
             initialValue: preferencesService.blinkThreshold,
-            unitText: "seconds between blinks"
+            unitText: "s"
         )
         blinkThresholdView.onValueChanged = { [weak self] newValue in
             self?.preferencesService.blinkThreshold = newValue
