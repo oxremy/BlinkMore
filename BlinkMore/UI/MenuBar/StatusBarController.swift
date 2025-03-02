@@ -306,12 +306,7 @@ class StatusBarController {
         // Make menu stay visible when color well is clicked
         menu.autoenablesItems = false
         
-        // Add preferences controls directly to the menu
-        addPreferencesToMenu()
-        
-        menu.addItem(NSMenuItem.separator())
-        
-        // Create credit menu item with smaller text
+        // Create credit menu item with smaller text and add it at the top
         let creditItem = NSMenuItem(title: "", action: #selector(openGitHub), keyEquivalent: "")
         let creditFont = NSFont.systemFont(ofSize: 11, weight: .regular) // Smaller font size
         let creditAttributes: [NSAttributedString.Key: Any] = [
@@ -322,6 +317,19 @@ class StatusBarController {
         creditItem.attributedTitle = creditAttributedTitle
         creditItem.target = self
         menu.addItem(creditItem)
+        
+        // Add separator after credit
+        menu.addItem(NSMenuItem.separator())
+        
+        // Add preferences controls directly to the menu
+        addPreferencesToMenu()
+        
+        menu.addItem(NSMenuItem.separator())
+        
+        // Add Quit button
+        let quitItem = NSMenuItem(title: "Quit", action: #selector(quitApplication), keyEquivalent: "q")
+        quitItem.target = self
+        menu.addItem(quitItem)
         
         // Set the menu
         statusItem.menu = menu
@@ -511,13 +519,6 @@ class StatusBarController {
                                 "1. Designed for Mac's with built-in camera.\n" +
                                 "2. Clear view of eyes. Obstructions like glasses or an eye patch might cause blink detection to fail."
         
-        // Set custom icon - using eye image from app assets
-        if let eyeIcon = NSImage(named: "OpenEyeIcon") {
-            // Make the icon larger for the alert
-            eyeIcon.size = NSSize(width: 64, height: 64)
-            alert.icon = eyeIcon
-        }
-        
         alert.addButton(withTitle: "Got it!")
         alert.runModal()
     }
@@ -662,6 +663,10 @@ class StatusBarController {
     
     // Work item for delayed fade action
     private var fadeDelayWorkItem: DispatchWorkItem?
+    
+    @objc private func quitApplication() {
+        NSApplication.shared.terminate(self)
+    }
     
     @objc private func openGitHub() {
         NSWorkspace.shared.open(Constants.authorURL)
