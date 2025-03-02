@@ -12,11 +12,11 @@ enum Constants {
     // Default preferences
     static let defaultFadeSpeed: Double = 5.0 // seconds
     static let minFadeSpeed: Double = 1.0
-    static let maxFadeSpeed: Double = 10.0
+    static let maxFadeSpeed: Double = 5.0
     
     static let defaultBlinkThreshold: Double = 5.0 // seconds
     static let minBlinkThreshold: Double = 3.0
-    static let maxBlinkThreshold: Double = 10.0
+    static let maxBlinkThreshold: Double = 12.0
     
     static let defaultFadeColor: NSColor = .black
     static let defaultEyeTrackingEnabled: Bool = false

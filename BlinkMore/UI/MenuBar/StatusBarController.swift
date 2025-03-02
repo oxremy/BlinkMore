@@ -34,7 +34,7 @@ class MenuSliderView: NSView {
         
         // Create the title label
         titleLabel = NSTextField(labelWithString: "\(title):")
-        titleLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        titleLabel.font = NSFont.systemFont(ofSize: 13, weight: .regular)
         titleLabel.textColor = .labelColor
         titleLabel.isEditable = false
         titleLabel.isSelectable = false
@@ -46,7 +46,7 @@ class MenuSliderView: NSView {
         
         // Create the value label
         valueLabel = NSTextField(labelWithString: "")
-        valueLabel.font = NSFont.systemFont(ofSize: 14, weight: .regular)
+        valueLabel.font = NSFont.systemFont(ofSize: 13, weight: .regular)
         valueLabel.textColor = .secondaryLabelColor
         valueLabel.isEditable = false
         valueLabel.isSelectable = false
@@ -131,7 +131,7 @@ class MenuColorPickerView: NSView {
     init(frame frameRect: NSRect, title: String, initialColor: NSColor) {
         // Create the title label
         titleLabel = NSTextField(labelWithString: "\(title):")
-        titleLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        titleLabel.font = NSFont.systemFont(ofSize: 13, weight: .regular)
         titleLabel.textColor = .labelColor
         titleLabel.isEditable = false
         titleLabel.isSelectable = false
@@ -147,20 +147,15 @@ class MenuColorPickerView: NSView {
         
         super.init(frame: frameRect)
         
-        // Configure the color well and panel
+        // Configure the color well
         colorWell.target = self
         colorWell.action = #selector(colorChanged(_:))
-        
-        // Configure the color panel
-        NSColorPanel.shared.showsAlpha = true
-        NSColorPanel.shared.setTarget(self)
-        NSColorPanel.shared.setAction(#selector(colorPanelChanged))
         
         // Add subviews
         addSubview(titleLabel)
         addSubview(colorWell)
         
-        // Set up the color panel to work with our color well
+        // Register for notifications when the color panel closes
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(colorPanelDidClose),
@@ -205,31 +200,47 @@ class MenuColorPickerView: NSView {
         
         // Notify observers
         onColorChanged?(currentColor)
-        
-        print("Color changed to: \(currentColor)")
     }
     
-    // Modified mouse handling to properly open the color panel
+    // Forward mouse events to the color well and let it handle standard behavior
     override func mouseDown(with event: NSEvent) {
         let localPoint = convert(event.locationInWindow, from: nil)
         
         if colorWell.frame.contains(localPoint) {
-            // Directly open the color panel without relying on NSColorWell's handling
-            if !NSColorPanel.shared.isVisible {
-                NSColorPanel.shared.setTarget(self)
-                NSColorPanel.shared.setAction(#selector(colorPanelChanged))
-                NSColorPanel.shared.color = colorWell.color
-                
-                // Make color panel visible on top
-                NSColorPanel.shared.makeKeyAndOrderFront(nil)
-                NSApp.activate(ignoringOtherApps: true)
-                
-                // This line is important - it keeps the menu open
-                NSApp.mainMenu?.cancelTracking()
-            }
+            // Use a simpler approach to keep the menu open
+            // Instead of trying to manipulate the menu directly, we'll just open the color panel
+            NSColorPanel.shared.setTarget(self)
+            NSColorPanel.shared.setAction(#selector(colorPanelChanged))
+            NSColorPanel.shared.color = colorWell.color
+            NSColorPanel.shared.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
         } else {
             super.mouseDown(with: event)
         }
+    }
+    
+    // Helper function to find the menu this view is contained in
+    private func findMenu() -> NSMenu? {
+        var responder: NSResponder? = self
+        while responder != nil {
+            // Try to find the menu through responder chain
+            if let viewController = responder as? NSViewController,
+               let menu = viewController.view.window?.attachedSheet as? NSPanel,
+               menu.contentView?.subviews.first is NSMenu {
+                return menu.contentView?.subviews.first as? NSMenu
+            }
+            responder = responder?.nextResponder
+        }
+        
+        // Fallback to using the app's main menu
+        return nil
+    }
+    
+    // Helper to find the status item
+    private func statusItem() -> NSStatusItem? {
+        // Since we can't directly access the status item that contains this view,
+        // we'll just return nil and rely on other mechanisms
+        return nil
     }
     
     @objc private func colorPanelChanged() {
@@ -241,7 +252,12 @@ class MenuColorPickerView: NSView {
     }
     
     @objc private func colorPanelDidClose(_ notification: Notification) {
-        print("Color panel closed")
+        // Make sure we capture the final color
+        if NSColorPanel.shared.color != currentColor {
+            currentColor = NSColorPanel.shared.color
+            colorWell.color = currentColor
+            onColorChanged?(currentColor)
+        }
     }
 }
 
@@ -289,31 +305,6 @@ class StatusBarController {
         
         // Make menu stay visible when color well is clicked
         menu.autoenablesItems = false
-        
-        // Set up local event monitor for clicks that should keep the menu open
-        NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .mouseMoved]) { event in
-            // Prevent menu from closing when interacting with color panel
-            if NSColorPanel.shared.isVisible {
-                // Don't interfere with events in the color panel itself
-                if NSApp.mainWindow === NSColorPanel.shared {
-                    return event
-                }
-                
-                // Prevent menu from closing by canceling tracking
-                if NSMenu.menuBarVisible() {
-                    // Check if click is outside the menu and not in the color panel
-                    let clickedWindow = NSApp.window(withWindowNumber: event.windowNumber)
-                    
-                    // If the clicked window is not the color panel, keep the panel visible
-                    if clickedWindow != NSColorPanel.shared {
-                        // Keep the color panel visible
-                        NSColorPanel.shared.orderFront(nil)
-                        return nil // Eat the event to keep menu open
-                    }
-                }
-            }
-            return event
-        }
         
         // Add preferences controls directly to the menu
         addPreferencesToMenu()
@@ -374,6 +365,11 @@ class StatusBarController {
                         button.image = self?.closedEyeImage
                     }
                 }
+                
+                // Update the menu item state
+                if let eyeTrackingItem = self?.menu.items.first(where: { $0.title == "Enable Eye Tracking" }) {
+                    eyeTrackingItem.state = enabled ? .on : .off
+                }
             }
             .store(in: &cancelBag)
         
@@ -401,11 +397,35 @@ class StatusBarController {
     }
     
     private func addPreferencesToMenu() {
+        // Add section headers with bold formatting
+        let appearanceHeader = createSectionHeader("Appearance")
+        menu.addItem(appearanceHeader)
+        
+        // Add Fade Color picker with improved layout
+        let colorPickerItem = NSMenuItem()
+        let colorPickerView = MenuColorPickerView(
+            frame: NSRect(x: 0, y: 0, width: 280, height: 60),
+            title: "Fade Color",
+            initialColor: preferencesService.fadeColor
+        )
+        colorPickerView.onColorChanged = { [weak self] newColor in
+            DispatchQueue.main.async {
+                self?.preferencesService.fadeColor = newColor
+            }
+        }
+        colorPickerItem.view = colorPickerView
+        menu.addItem(colorPickerItem)
+        self.colorPickerView = colorPickerView
+        
+        // Add section header for timing controls
+        let timingHeader = createSectionHeader("Timing")
+        menu.addItem(timingHeader)
+        
         // Fade Speed slider
         let fadeSpeedItem = NSMenuItem()
         let fadeSpeedView = MenuSliderView(
             frame: NSRect(x: 0, y: 0, width: 280, height: 80),
-            title: "Fade Speed",
+            title: "Fade Duration",
             minValue: Constants.minFadeSpeed,
             maxValue: Constants.maxFadeSpeed,
             initialValue: preferencesService.fadeSpeed,
@@ -435,47 +455,78 @@ class StatusBarController {
         menu.addItem(blinkThresholdItem)
         self.blinkThresholdView = blinkThresholdView
         
-        // Fade Color picker
-        let colorPickerItem = NSMenuItem()
-        let colorPickerView = MenuColorPickerView(
-            frame: NSRect(x: 0, y: 0, width: 280, height: 40),
-            title: "Fade Color",
-            initialColor: preferencesService.fadeColor
-        )
-        colorPickerView.onColorChanged = { [weak self] newColor in
-            // Use main queue to update preferences to avoid threading issues
-            DispatchQueue.main.async {
-                self?.preferencesService.fadeColor = newColor
-                print("Color picker changed to: \(newColor)")
-            }
-        }
+        // Add section header for features
+        let featuresHeader = createSectionHeader("Features")
+        menu.addItem(featuresHeader)
         
-        colorPickerItem.view = colorPickerView
-        menu.addItem(colorPickerItem)
-        self.colorPickerView = colorPickerView
-        
-        // Eye Tracking toggle
-        let eyeTrackingItem = NSMenuItem(title: "Enable Eye Tracking", action: #selector(toggleEyeTracking), keyEquivalent: "")
-        eyeTrackingItem.target = self
+        // Add Eye Tracking toggle as a separate menu item
+        let eyeTrackingItem = NSMenuItem(title: "Enable Eye Tracking", action: #selector(toggleEyeTracking(_:)), keyEquivalent: "")
         eyeTrackingItem.state = preferencesService.eyeTrackingEnabled ? .on : .off
+        eyeTrackingItem.target = self
+        
+        // Set standard font size for the eye tracking menu item
+        let eyeTrackingFont = NSFont.systemFont(ofSize: 13)
+        eyeTrackingItem.attributedTitle = NSAttributedString(
+            string: "Enable Eye Tracking",
+            attributes: [.font: eyeTrackingFont]
+        )
+        
         menu.addItem(eyeTrackingItem)
+        
+        // Add help menu item that explains how the app works
+        let helpItem = NSMenuItem(title: "How It Works", action: #selector(showHowItWorks), keyEquivalent: "")
+        helpItem.target = self
+        
+        // Use consistent font styling for help item
+        let helpFont = NSFont.systemFont(ofSize: 13)
+        helpItem.attributedTitle = NSAttributedString(
+            string: "How It Works",
+            attributes: [.font: helpFont]
+        )
+        
+        menu.addItem(helpItem)
+    }
+    
+    // Helper to create section headers
+    private func createSectionHeader(_ title: String) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        let headerFont = NSFont.boldSystemFont(ofSize: 13)
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: headerFont,
+            .foregroundColor: NSColor.secondaryLabelColor
+        ]
+        item.attributedTitle = NSAttributedString(string: title, attributes: attributes)
+        item.isEnabled = false
+        return item
+    }
+    
+    @objc private func showHowItWorks() {
+        let alert = NSAlert()
+        alert.messageText = "How BlinkMore Works"
+        alert.informativeText = "BlinkMore uses your camera to detect when you're not blinking enough.\n\n" +
+                                "1. When your eyes stay open too long, the screen gradually fades.\n" +
+                                "2. This subtle reminder helps you remember to blink regularly.\n" +
+                                "3. Blinking keeps your eyes moisturized and reduces eye strain.\n\n" +
+                                "Adjust the timing settings to your comfort level."
+        alert.addButton(withTitle: "Got it!")
+        alert.runModal()
     }
     
     @objc private func toggleEyeTracking(_ sender: NSMenuItem) {
-        // Toggle the preference
-        let newState = !preferencesService.eyeTrackingEnabled
+        // Toggle eye tracking state
+        let enabled = sender.state != .on
         
-        if newState {
+        if enabled {
             // If turning on, check permissions first
             PermissionsService.shared.checkCameraAccess { [weak self] granted in
                 DispatchQueue.main.async {
                     if granted {
-                        self?.preferencesService.eyeTrackingEnabled = true
                         sender.state = .on
+                        self?.preferencesService.eyeTrackingEnabled = true
                     } else {
                         // If permission denied, keep it off
-                        self?.preferencesService.eyeTrackingEnabled = false
                         sender.state = .off
+                        self?.preferencesService.eyeTrackingEnabled = false
                         
                         // Show alert
                         let alert = NSAlert()
@@ -492,8 +543,8 @@ class StatusBarController {
             }
         } else {
             // Simply turn it off
-            preferencesService.eyeTrackingEnabled = false
             sender.state = .off
+            self.preferencesService.eyeTrackingEnabled = false
         }
     }
     
@@ -607,14 +658,8 @@ class StatusBarController {
     }
     
     @objc private func menuWillClose(_ notification: Notification) {
-        // If color panel is visible, keep it open
-        if NSColorPanel.shared.isVisible {
-            // Bring the color panel to the front
-            DispatchQueue.main.async {
-                NSColorPanel.shared.makeKeyAndOrderFront(nil)
-                NSApp.activate(ignoringOtherApps: true)
-            }
-        }
+        // We no longer need special handling to keep the color panel open
+        // when the menu closes - this follows standard macOS behavior
     }
 }
 
