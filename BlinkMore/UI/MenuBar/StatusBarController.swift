@@ -503,8 +503,7 @@ class StatusBarController {
     @objc private func showHowItWorks() {
         let alert = NSAlert()
         alert.messageText = "How BlinkMore Works"
-        alert.informativeText = "BlinkMore uses your camera to detect when you're not blinking enough.\n" +
-                                "Adjust the timing settings to your comfort level.\n\n" +
+        alert.informativeText = "BlinkMore uses your camera to detect when you're not blinking enough.\n\n" +
                                 "1. When your eyes stay open too long, the screen gradually fades.\n" +
                                 "2. This subtle reminder helps you remember to blink regularly.\n" +
                                 "3. Blinking keeps your eyes moisturized and reduces eye strain.\n\n" +
