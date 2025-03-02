@@ -503,11 +503,22 @@ class StatusBarController {
     @objc private func showHowItWorks() {
         let alert = NSAlert()
         alert.messageText = "How BlinkMore Works"
-        alert.informativeText = "BlinkMore uses your camera to detect when you're not blinking enough.\n\n" +
+        alert.informativeText = "BlinkMore uses your camera to detect when you're not blinking enough.\n" +
+                                "Adjust the timing settings to your comfort level.\n\n" +
                                 "1. When your eyes stay open too long, the screen gradually fades.\n" +
                                 "2. This subtle reminder helps you remember to blink regularly.\n" +
                                 "3. Blinking keeps your eyes moisturized and reduces eye strain.\n\n" +
-                                "Adjust the timing settings to your comfort level."
+                                "Intended Use:\n" +
+                                "1. Designed for Mac's with built-in camera.\n" +
+                                "2. Clear view of eyes. Obstructions like glasses or an eye patch might cause blink detection to fail."
+        
+        // Set custom icon - using eye image from app assets
+        if let eyeIcon = NSImage(named: "OpenEyeIcon") {
+            // Make the icon larger for the alert
+            eyeIcon.size = NSSize(width: 64, height: 64)
+            alert.icon = eyeIcon
+        }
+        
         alert.addButton(withTitle: "Got it!")
         alert.runModal()
     }
