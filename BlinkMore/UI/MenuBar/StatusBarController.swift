@@ -326,6 +326,19 @@ class StatusBarController {
         
         menu.addItem(NSMenuItem.separator())
         
+        // Add help menu item that explains how the app works (moved from Features section)
+        let helpItem = NSMenuItem(title: "How It Works", action: #selector(showHowItWorks), keyEquivalent: "")
+        helpItem.target = self
+        
+        // Use consistent font styling for help item
+        let helpFont = NSFont.systemFont(ofSize: 13)
+        helpItem.attributedTitle = NSAttributedString(
+            string: "How It Works",
+            attributes: [.font: helpFont]
+        )
+        
+        menu.addItem(helpItem)
+        
         // Add Quit button
         let quitItem = NSMenuItem(title: "Quit", action: #selector(quitApplication), keyEquivalent: "q")
         quitItem.target = self
@@ -480,19 +493,6 @@ class StatusBarController {
         )
         
         menu.addItem(eyeTrackingItem)
-        
-        // Add help menu item that explains how the app works
-        let helpItem = NSMenuItem(title: "How It Works", action: #selector(showHowItWorks), keyEquivalent: "")
-        helpItem.target = self
-        
-        // Use consistent font styling for help item
-        let helpFont = NSFont.systemFont(ofSize: 13)
-        helpItem.attributedTitle = NSAttributedString(
-            string: "How It Works",
-            attributes: [.font: helpFont]
-        )
-        
-        menu.addItem(helpItem)
     }
     
     // Helper to create section headers

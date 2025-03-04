@@ -30,7 +30,7 @@ class EyeTrackingService: NSObject, ObservableObject, AVCaptureVideoDataOutputSa
     private let frameProcessingInterval = 2 // Process every 2nd frame
     
     // Eye Aspect Ratio (EAR) threshold
-    private let earThreshold: Double = 0.2 // Threshold below which eyes are considered closed
+    private let earThreshold: Double = 0.1 // Threshold below which eyes are considered closed
     
     override init() {
         super.init()
