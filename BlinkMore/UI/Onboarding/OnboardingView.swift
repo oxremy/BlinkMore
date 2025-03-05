@@ -24,15 +24,24 @@ struct OnboardingView: View {
                 .foregroundColor(.blue)
             
             Text("Welcome to BlinkMore")
-                .font(.largeTitle)
-                .fontWeight(.bold)
+                .font(.system(size: 24, weight: .bold))
             
-            Text("This app uses your camera to detect blinks and reduce eye strain by fading the screen when you stare for too long. Eye lube is the best lube!")
+            Text("BlinkMore helps reduce eye strain by detecting when you're not blinking enough and gently fading the screen as a reminder.")
                 .font(.body)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
+                .foregroundColor(.secondary)
             
             Spacer()
+            
+            Group {
+                Text("This app requires camera access to detect your blinks.")
+                    .font(.subheadline)
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 40)
+                    .padding(.bottom, 8)
+            }
             
             Button(action: {
                 permissions.requestCameraAccess { granted in
@@ -43,10 +52,10 @@ struct OnboardingView: View {
                     }
                 }
             }) {
-                Text("Grant Camera Access")
-                    .fontWeight(.semibold)
+                Text("Continue with Camera Access")
+                    .font(.headline)
                     .padding()
-                    .frame(minWidth: 200)
+                    .frame(maxWidth: 280)
                     .background(Color.blue)
                     .foregroundColor(.white)
                     .cornerRadius(10)
@@ -57,8 +66,8 @@ struct OnboardingView: View {
                 preferences.hasShownOnboarding = true
                 isPresented = false
             }) {
-                Text("Skip for Now")
-                    .underline()
+                Text("Skip")
+                    .font(.subheadline)
                     .foregroundColor(.gray)
             }
             .buttonStyle(PlainButtonStyle())

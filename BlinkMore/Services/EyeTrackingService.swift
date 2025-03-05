@@ -16,6 +16,10 @@ class EyeTrackingService: NSObject, ObservableObject, AVCaptureVideoDataOutputSa
     @Published var isEyeOpen: Bool = false
     @Published var isActive: Bool = false
     
+    // Cached preference values
+    private var cachedEARSensitivity: Double = Constants.defaultEARSensitivity
+    private var cancellables = Set<AnyCancellable>()
+    
     // Camera capture components
     private var captureSession: AVCaptureSession?
     private var videoDataOutput: AVCaptureVideoDataOutput?
@@ -29,16 +33,27 @@ class EyeTrackingService: NSObject, ObservableObject, AVCaptureVideoDataOutputSa
     private var frameCounter = 0
     private let frameProcessingInterval = 2 // Process every 2nd frame
     
-    // Eye Aspect Ratio (EAR) threshold
-    private let earThreshold: Double = 0.1 // Threshold below which eyes are considered closed
+    // Eye Aspect Ratio (EAR) threshold - use cached value instead of direct access
+    private var earThreshold: Double {
+        return cachedEARSensitivity
+    }
+    
+    // Reference to preferences service
+    private let preferencesService = PreferencesService.shared
     
     override init() {
         super.init()
         faceLandmarksRequest.constellation = .constellation76Points // Use more detailed landmarks if available
+        
+        // Initialize cached values
+        updateCachedPreferences()
     }
     
     deinit {
         print("EyeTrackingService being deinitialized")
+        
+        // Clean up cancellables
+        cancellables.removeAll()
         
         // Make sure to clean up resources on the main thread
         if Thread.isMainThread {
@@ -69,6 +84,12 @@ class EyeTrackingService: NSObject, ObservableObject, AVCaptureVideoDataOutputSa
     // MARK: - Setup and Configuration
     
     func startTracking() {
+        // Update cached preferences before starting
+        updateCachedPreferences()
+        
+        // Set up preference change listeners
+        setupPreferenceListeners()
+        
         // Start the camera capture session on a background queue
         captureSessionQueue.async { [weak self] in
             guard let self = self else { return }
@@ -92,6 +113,9 @@ class EyeTrackingService: NSObject, ObservableObject, AVCaptureVideoDataOutputSa
     }
     
     func stopTracking() {
+        // Clear preference listeners when stopping
+        cancellables.removeAll()
+        
         // Stop the capture session on a background queue
         captureSessionQueue.async { [weak self] in
             guard let self = self else { return }
@@ -301,5 +325,43 @@ class EyeTrackingService: NSObject, ObservableObject, AVCaptureVideoDataOutputSa
                 self.isEyeOpen = false
             }
         }
+    }
+    
+    // Method to update all cached preference values
+    private func updateCachedPreferences() {
+        cachedEARSensitivity = preferencesService.earSensitivity
+        
+        // Map numeric EAR value to human-readable sensitivity for logging
+        let sensitivityLabel: String
+        let range = Constants.maxEARSensitivity - Constants.minEARSensitivity
+        let step = range / 2.0
+        let relative = cachedEARSensitivity - Constants.minEARSensitivity
+        
+        if relative < step * 0.5 {
+            sensitivityLabel = "high"
+        } else if relative < step * 1.5 {
+            sensitivityLabel = "medium"
+        } else {
+            sensitivityLabel = "low"
+        }
+        
+        print("Cached EAR sensitivity updated to: \(cachedEARSensitivity) (\(sensitivityLabel) sensitivity)")
+    }
+    
+    // Set up listeners for preference changes
+    private func setupPreferenceListeners() {
+        // Cancel any existing subscriptions first
+        cancellables.removeAll()
+        
+        // Listen for EAR sensitivity changes
+        preferencesService.$earSensitivity
+            .dropFirst() // Skip initial value
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] newValue in
+                guard let self = self else { return }
+                self.cachedEARSensitivity = newValue
+                print("Updated cached EAR sensitivity to: \(newValue)")
+            }
+            .store(in: &cancellables)
     }
 } 

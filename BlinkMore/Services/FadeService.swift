@@ -19,6 +19,10 @@ class FadeService: ObservableObject {
     private var screenChangeDebounceTimer: Timer?
     private let screenChangeDebounceInterval: TimeInterval = 0.5 // Half-second debounce
     
+    // Timeout timer for extended fade states
+    private var fadeTimeoutTimer: Timer?
+    private let fadeTimeoutInterval: TimeInterval = Constants.fadeTimeoutDuration
+    
     private init() {
         // Initialize fade windows for each screen
         setupFadeWindows()
@@ -71,6 +75,7 @@ class FadeService: ObservableObject {
         NotificationCenter.default.removeObserver(self)
         cancellables.removeAll()
         screenChangeDebounceTimer?.invalidate()
+        fadeTimeoutTimer?.invalidate()
     }
     
     @objc private func screensChanged() {
@@ -175,6 +180,9 @@ class FadeService: ObservableObject {
             }
         }
         
+        // Start the timeout timer
+        startFadeTimeoutTimer()
+        
         // Log the action
         print("Applying fade with color \(fadeColor) and duration \(fadeDuration)")
     }
@@ -183,6 +191,9 @@ class FadeService: ObservableObject {
         // Remove guard since we want to be able to call this repeatedly when releasing
         
         isFaded = false
+        
+        // Cancel timeout timer
+        cancelFadeTimeoutTimer()
         
         fadeWindows.forEach { window in
             // Update the view with zero opacity and quick animation
@@ -309,6 +320,40 @@ class FadeService: ObservableObject {
                     window.orderFront(nil)
                 }
             }
+        }
+    }
+    
+    // MARK: - Fade Timeout Handling
+    
+    private func startFadeTimeoutTimer() {
+        // Cancel any existing timer first
+        cancelFadeTimeoutTimer()
+        
+        // Create new timer
+        fadeTimeoutTimer = Timer.scheduledTimer(withTimeInterval: fadeTimeoutInterval, repeats: false) { [weak self] _ in
+            self?.handleFadeTimeout()
+        }
+        
+        print("Started fade timeout timer (\(fadeTimeoutInterval)s)")
+    }
+    
+    private func cancelFadeTimeoutTimer() {
+        if let timer = fadeTimeoutTimer, timer.isValid {
+            timer.invalidate()
+            fadeTimeoutTimer = nil
+            print("Cancelled fade timeout timer")
+        }
+    }
+    
+    private func handleFadeTimeout() {
+        print("Fade timeout reached after \(fadeTimeoutInterval)s - disabling eye tracking")
+        
+        // Remove fade
+        removeFade()
+        
+        // Disable eye tracking in preferences
+        DispatchQueue.main.async {
+            self.preferencesService.eyeTrackingEnabled = false
         }
     }
 }

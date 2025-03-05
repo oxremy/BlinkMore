@@ -28,11 +28,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         } else {
             // If onboarding already completed, verify camera permission status
-            verifyPermissions()
+            verifyPermissions {
+                // Only initialize eye tracking after permissions have been verified
+                self.statusBarController.initializeEyeTrackingIfEnabled()
+            }
         }
     }
     
-    private func verifyPermissions() {
+    private func verifyPermissions(completion: @escaping () -> Void = {}) {
         // Check if eye tracking is enabled but camera permission is not granted
         if preferencesService.eyeTrackingEnabled {
             permissionsService.checkCameraAccess { [weak self] granted in
@@ -42,6 +45,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                         self?.preferencesService.eyeTrackingEnabled = false
                     }
                 }
+                
+                // Call completion handler regardless of permission state
+                DispatchQueue.main.async {
+                    completion()
+                }
+            }
+        } else {
+            // If eye tracking is not enabled, still call completion
+            DispatchQueue.main.async {
+                completion()
             }
         }
     }
@@ -49,7 +62,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func showOnboarding() {
         OnboardingWindowController.show { [weak self] in
             // Onboarding completed or dismissed
-            self?.verifyPermissions()
+            self?.verifyPermissions {
+                // Initialize eye tracking after permissions verified
+                self?.statusBarController.initializeEyeTrackingIfEnabled()
+            }
         }
     }
     

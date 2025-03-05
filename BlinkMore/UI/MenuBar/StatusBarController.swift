@@ -10,14 +10,12 @@ import AppKit
 import SwiftUI
 import Combine
 
-// Custom view for slider in menu
-class MenuSliderView: NSView {
-    private var titleLabel: NSTextField
-    private var slider: NSSlider
-    private var valueLabel: NSTextField
-    private var minLabel: NSTextField?
-    private var maxLabel: NSTextField?
-    private var unitText: String
+// Custom view for slider in menu using Auto Layout
+class BetterMenuSliderView: NSView {
+    private let stackView = NSStackView()
+    private let titleLabel = NSTextField(labelWithString: "")
+    private let slider = NSSlider()
+    private let valueLabel = NSTextField(labelWithString: "")
     
     var value: Double {
         get { return slider.doubleValue }
@@ -28,134 +26,192 @@ class MenuSliderView: NSView {
     }
     
     var onValueChanged: ((Double) -> Void)?
+    private var customTextValues: [String]?
+    private var unitText: String
+    private var isDiscrete: Bool
+    private var numberOfTickMarks: Int
+    private var allowsMiddleValues: Bool
     
-    init(frame frameRect: NSRect, title: String, minValue: Double, maxValue: Double, initialValue: Double, unitText: String = "seconds") {
+    init(title: String, minValue: Double, maxValue: Double, initialValue: Double, unitText: String = "seconds", 
+         isDiscrete: Bool = false, numberOfTickMarks: Int = 0, allowsMiddleValues: Bool = true, customTextValues: [String]? = nil) {
+        self.customTextValues = customTextValues
         self.unitText = unitText
+        self.isDiscrete = isDiscrete
+        self.numberOfTickMarks = numberOfTickMarks
+        self.allowsMiddleValues = allowsMiddleValues
         
-        // Create the title label
-        titleLabel = NSTextField(labelWithString: "\(title):")
-        titleLabel.font = NSFont.systemFont(ofSize: 13, weight: .regular)
+        super.init(frame: .zero)
+        
+        // Configure title label
+        titleLabel.stringValue = "\(title):"
+        titleLabel.font = NSFont.systemFont(ofSize: 13)
         titleLabel.textColor = .labelColor
         titleLabel.isEditable = false
         titleLabel.isSelectable = false
         titleLabel.isBordered = false
         titleLabel.backgroundColor = .clear
         
-        // Create the slider
-        slider = NSSlider(value: initialValue, minValue: minValue, maxValue: maxValue, target: nil, action: #selector(sliderChanged(_:)))
-        
-        // Create the value label
-        valueLabel = NSTextField(labelWithString: "")
-        valueLabel.font = NSFont.systemFont(ofSize: 13, weight: .regular)
+        // Configure value label
+        valueLabel.font = NSFont.systemFont(ofSize: 13)
         valueLabel.textColor = .secondaryLabelColor
         valueLabel.isEditable = false
         valueLabel.isSelectable = false
         valueLabel.isBordered = false
         valueLabel.backgroundColor = .clear
         valueLabel.alignment = .right
+        valueLabel.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
         
-        super.init(frame: frameRect)
-        
-        addSubview(titleLabel)
-        addSubview(slider)
-        addSubview(valueLabel)
-        
+        // Configure slider
+        slider.minValue = minValue
+        slider.maxValue = maxValue
+        slider.doubleValue = initialValue
         slider.target = self
+        slider.action = #selector(sliderChanged(_:))
         
+        // Configure discrete behavior if requested
+        if isDiscrete && numberOfTickMarks > 0 {
+            slider.numberOfTickMarks = numberOfTickMarks
+            slider.allowsTickMarkValuesOnly = !allowsMiddleValues
+            slider.tickMarkPosition = .below
+        }
+        
+        // Set up header row
+        let headerStack = NSStackView(views: [titleLabel, valueLabel])
+        headerStack.distribution = .fill
+        headerStack.spacing = 8
+        
+        // Set up main stack
+        stackView.orientation = .vertical
+        stackView.alignment = .leading
+        stackView.distribution = .fill
+        stackView.spacing = 4
+        stackView.addArrangedSubview(headerStack)
+        stackView.addArrangedSubview(slider)
+        
+        // Make slider full width
+        slider.widthAnchor.constraint(equalTo: stackView.widthAnchor).isActive = true
+        headerStack.widthAnchor.constraint(equalTo: stackView.widthAnchor).isActive = true
+        
+        // Add to view with proper constraints
+        addSubview(stackView)
+        stackView.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            stackView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            stackView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            stackView.topAnchor.constraint(equalTo: topAnchor, constant: 10),
+            stackView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10)
+        ])
+        
+        // Update value display
         updateValueLabel()
-        layout()
     }
     
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
     
-    override func layout() {
-        super.layout()
-        
-        let padding: CGFloat = 10
-        let labelWidth: CGFloat = 170
-        let valueWidth: CGFloat = 40
-        
-        // Position title label
-        titleLabel.frame = NSRect(
-            x: padding,
-            y: bounds.height - 30,
-            width: labelWidth,
-            height: 20
-        )
-        
-        // Position value label
-        valueLabel.frame = NSRect(
-            x: bounds.width - padding - valueWidth,
-            y: bounds.height - 30,
-            width: valueWidth,
-            height: 20
-        )
-        
-        // Position slider
-        slider.frame = NSRect(
-            x: padding,
-            y: bounds.height - 55,
-            width: bounds.width - (padding * 2),
-            height: 20
-        )
-    }
-    
     @objc private func sliderChanged(_ sender: NSSlider) {
+        // If discrete but not using tick marks only, snap to nearest integer or step
+        if isDiscrete && !slider.allowsTickMarkValuesOnly && numberOfTickMarks > 1 {
+            let range = slider.maxValue - slider.minValue
+            let stepSize = range / Double(numberOfTickMarks - 1)
+            
+            // Calculate the nearest step value
+            let steps = round((sender.doubleValue - slider.minValue) / stepSize)
+            let snappedValue = slider.minValue + (steps * stepSize)
+            
+            // Only update if different (to avoid loops)
+            if abs(sender.doubleValue - snappedValue) > 0.01 {
+                sender.doubleValue = snappedValue
+            }
+        }
+        
         updateValueLabel()
         onValueChanged?(sender.doubleValue)
     }
     
     private func updateValueLabel() {
-        valueLabel.stringValue = "\(Int(slider.doubleValue))s"
+        if let customTextValues = customTextValues, customTextValues.count >= 3 {
+            // For a 3-value custom text array with min/med/max
+            let normalizedValue = (slider.doubleValue - slider.minValue) / (slider.maxValue - slider.minValue)
+            
+            if normalizedValue >= 0.66 {
+                valueLabel.stringValue = customTextValues[2] // "high" when slider is to the right
+            } else if normalizedValue >= 0.33 {
+                valueLabel.stringValue = customTextValues[1] // "med" in the middle
+            } else {
+                valueLabel.stringValue = customTextValues[0] // "low" when slider is to the left
+            }
+        } else if isDiscrete && unitText == "s" {
+            // For time values, show as integers
+            valueLabel.stringValue = "\(Int(round(slider.doubleValue)))\(unitText)"
+        } else {
+            // Default formatting
+            valueLabel.stringValue = "\(Int(slider.doubleValue))\(unitText)"
+        }
     }
 }
 
-// Custom view for color picker in menu
-class MenuColorPickerView: NSView {
-    private var titleLabel: NSTextField
-    private var colorWell: NSColorWell
-    private var currentColor: NSColor
+// Custom view for color picker in menu using Auto Layout
+class BetterMenuColorPickerView: NSView {
+    private let stackView = NSStackView()
+    private let titleLabel = NSTextField(labelWithString: "")
+    private let colorWell = NSColorWell()
     
     var color: NSColor {
-        get { return currentColor }
-        set { 
-            currentColor = newValue
-            colorWell.color = newValue
-        }
+        get { return colorWell.color }
+        set { colorWell.color = newValue }
     }
     
     var onColorChanged: ((NSColor) -> Void)?
     
-    init(frame frameRect: NSRect, title: String, initialColor: NSColor) {
-        // Create the title label
-        titleLabel = NSTextField(labelWithString: "\(title):")
-        titleLabel.font = NSFont.systemFont(ofSize: 13, weight: .regular)
+    init(title: String, initialColor: NSColor) {
+        super.init(frame: .zero)
+        
+        // Configure title label
+        titleLabel.stringValue = "\(title):"
+        titleLabel.font = NSFont.systemFont(ofSize: 13)
         titleLabel.textColor = .labelColor
         titleLabel.isEditable = false
         titleLabel.isSelectable = false
         titleLabel.isBordered = false
         titleLabel.backgroundColor = .clear
         
-        // Create NSColorWell - this is the standard macOS color picker control
-        colorWell = NSColorWell(frame: NSRect(x: 0, y: 0, width: 30, height: 30))
+        // Configure color well
         colorWell.color = initialColor
-        colorWell.isBordered = true
-        
-        currentColor = initialColor
-        
-        super.init(frame: frameRect)
-        
-        // Configure the color well
         colorWell.target = self
         colorWell.action = #selector(colorChanged(_:))
         
-        // Add subviews
-        addSubview(titleLabel)
-        addSubview(colorWell)
+        // Set fixed size for the color well
+        colorWell.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+        let sizeConstraint = colorWell.widthAnchor.constraint(equalToConstant: 30)
+        sizeConstraint.isActive = true
+        colorWell.heightAnchor.constraint(equalTo: colorWell.widthAnchor).isActive = true
         
-        // Register for notifications when the color panel closes
+        // Set up stack view
+        stackView.orientation = .horizontal
+        stackView.distribution = .fill
+        stackView.spacing = 8
+        stackView.addArrangedSubview(titleLabel)
+        
+        // Add a spacer view for flexible spacing
+        let spacerView = NSView()
+        spacerView.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        stackView.addArrangedSubview(spacerView)
+        
+        stackView.addArrangedSubview(colorWell)
+        
+        // Add to view with proper constraints
+        addSubview(stackView)
+        stackView.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            stackView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            stackView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            stackView.topAnchor.constraint(equalTo: topAnchor, constant: 10),
+            stackView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10)
+        ])
+        
+        // Observe color panel closing
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(colorPanelDidClose),
@@ -164,100 +220,21 @@ class MenuColorPickerView: NSView {
         )
     }
     
-    deinit {
-        NotificationCenter.default.removeObserver(self)
-    }
-    
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
     
-    override func layout() {
-        super.layout()
-        
-        let padding: CGFloat = 10
-        
-        // Position title label
-        titleLabel.frame = NSRect(
-            x: padding,
-            y: (bounds.height - 20) / 2,
-            width: 100,
-            height: 20
-        )
-        
-        // Position color well
-        colorWell.frame = NSRect(
-            x: bounds.width - padding - 30,
-            y: (bounds.height - 30) / 2,
-            width: 30,
-            height: 30
-        )
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
     
     @objc private func colorChanged(_ sender: NSColorWell) {
-        // Update the current color
-        currentColor = sender.color
-        
-        // Notify observers
-        onColorChanged?(currentColor)
-    }
-    
-    // Forward mouse events to the color well and let it handle standard behavior
-    override func mouseDown(with event: NSEvent) {
-        let localPoint = convert(event.locationInWindow, from: nil)
-        
-        if colorWell.frame.contains(localPoint) {
-            // Use a simpler approach to keep the menu open
-            // Instead of trying to manipulate the menu directly, we'll just open the color panel
-            NSColorPanel.shared.setTarget(self)
-            NSColorPanel.shared.setAction(#selector(colorPanelChanged))
-            NSColorPanel.shared.color = colorWell.color
-            NSColorPanel.shared.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-        } else {
-            super.mouseDown(with: event)
-        }
-    }
-    
-    // Helper function to find the menu this view is contained in
-    private func findMenu() -> NSMenu? {
-        var responder: NSResponder? = self
-        while responder != nil {
-            // Try to find the menu through responder chain
-            if let viewController = responder as? NSViewController,
-               let menu = viewController.view.window?.attachedSheet as? NSPanel,
-               menu.contentView?.subviews.first is NSMenu {
-                return menu.contentView?.subviews.first as? NSMenu
-            }
-            responder = responder?.nextResponder
-        }
-        
-        // Fallback to using the app's main menu
-        return nil
-    }
-    
-    // Helper to find the status item
-    private func statusItem() -> NSStatusItem? {
-        // Since we can't directly access the status item that contains this view,
-        // we'll just return nil and rely on other mechanisms
-        return nil
-    }
-    
-    @objc private func colorPanelChanged() {
-        // Capture color changes from the color panel
-        let newColor = NSColorPanel.shared.color
-        colorWell.color = newColor
-        currentColor = newColor
-        onColorChanged?(newColor)
+        onColorChanged?(sender.color)
     }
     
     @objc private func colorPanelDidClose(_ notification: Notification) {
-        // Make sure we capture the final color
-        if NSColorPanel.shared.color != currentColor {
-            currentColor = NSColorPanel.shared.color
-            colorWell.color = currentColor
-            onColorChanged?(currentColor)
-        }
+        // Ensure we capture the final color
+        onColorChanged?(colorWell.color)
     }
 }
 
@@ -268,9 +245,10 @@ class StatusBarController {
     private var fadeService = FadeService.shared
     private var eyeTrackingService: EyeTrackingService?
     
-    private var fadeSpeedView: MenuSliderView?
-    private var blinkThresholdView: MenuSliderView?
-    private var colorPickerView: MenuColorPickerView?
+    private var fadeSpeedView: BetterMenuSliderView?
+    private var blinkThresholdView: BetterMenuSliderView?
+    private var earSensitivityView: BetterMenuSliderView?
+    private var colorPickerView: BetterMenuColorPickerView?
     
     private var cancelBag = Set<AnyCancellable>()
     // Separate cancellable set specifically for eye tracking observations
@@ -306,7 +284,17 @@ class StatusBarController {
         // Make menu stay visible when color well is clicked
         menu.autoenablesItems = false
         
-        // Create credit menu item with smaller text and add it at the top
+        // Add preferences controls directly to the menu
+        addPreferencesToMenu()
+        
+        menu.addItem(NSMenuItem.separator())
+        
+        // Add help menu item that explains how the app works
+        let helpItem = NSMenuItem(title: "How It Works", action: #selector(showHowItWorks), keyEquivalent: "")
+        helpItem.target = self
+        menu.addItem(helpItem)
+        
+        // Add credit menu item at the bottom with smaller text
         let creditItem = NSMenuItem(title: "", action: #selector(openGitHub), keyEquivalent: "")
         let creditFont = NSFont.systemFont(ofSize: 11, weight: .regular) // Smaller font size
         let creditAttributes: [NSAttributedString.Key: Any] = [
@@ -318,27 +306,6 @@ class StatusBarController {
         creditItem.target = self
         menu.addItem(creditItem)
         
-        // Add separator after credit
-        menu.addItem(NSMenuItem.separator())
-        
-        // Add preferences controls directly to the menu
-        addPreferencesToMenu()
-        
-        menu.addItem(NSMenuItem.separator())
-        
-        // Add help menu item that explains how the app works (moved from Features section)
-        let helpItem = NSMenuItem(title: "How It Works", action: #selector(showHowItWorks), keyEquivalent: "")
-        helpItem.target = self
-        
-        // Use consistent font styling for help item
-        let helpFont = NSFont.systemFont(ofSize: 13)
-        helpItem.attributedTitle = NSAttributedString(
-            string: "How It Works",
-            attributes: [.font: helpFont]
-        )
-        
-        menu.addItem(helpItem)
-        
         // Add Quit button
         let quitItem = NSMenuItem(title: "Quit", action: #selector(quitApplication), keyEquivalent: "q")
         quitItem.target = self
@@ -347,17 +314,21 @@ class StatusBarController {
         // Set the menu
         statusItem.menu = menu
         
-        // Initialize eye tracking service if enabled
-        if preferencesService.eyeTrackingEnabled {
-            initializeEyeTracking()
-        }
-        
         // Subscribe to preferences changes to keep UI in sync
         preferencesService.$fadeColor
             .receive(on: DispatchQueue.main)
             .sink { [weak self] newColor in
                 // Update color picker UI when preference changes externally
                 self?.colorPickerView?.color = newColor
+            }
+            .store(in: &cancelBag)
+        
+        // Subscribe to EAR sensitivity changes
+        preferencesService.$earSensitivity
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] newValue in
+                // Update sensitivity slider UI when preference changes externally
+                self?.earSensitivityView?.value = newValue
             }
             .store(in: &cancelBag)
         
@@ -418,14 +389,13 @@ class StatusBarController {
     }
     
     private func addPreferencesToMenu() {
-        // Add section headers with bold formatting
+        // Add section headers with standard system style
         let appearanceHeader = createSectionHeader("Appearance")
         menu.addItem(appearanceHeader)
         
         // Add Fade Color picker with improved layout
         let colorPickerItem = NSMenuItem()
-        let colorPickerView = MenuColorPickerView(
-            frame: NSRect(x: 0, y: 0, width: 280, height: 60),
+        let colorPickerView = BetterMenuColorPickerView(
             title: "Fade Color",
             initialColor: preferencesService.fadeColor
         )
@@ -434,6 +404,7 @@ class StatusBarController {
                 self?.preferencesService.fadeColor = newColor
             }
         }
+        colorPickerView.frame = NSRect(x: 0, y: 0, width: 280, height: 50)
         colorPickerItem.view = colorPickerView
         menu.addItem(colorPickerItem)
         self.colorPickerView = colorPickerView
@@ -444,37 +415,64 @@ class StatusBarController {
         
         // Fade Speed slider
         let fadeSpeedItem = NSMenuItem()
-        let fadeSpeedView = MenuSliderView(
-            frame: NSRect(x: 0, y: 0, width: 280, height: 80),
+        let fadeSpeedView = BetterMenuSliderView(
             title: "Fade Duration",
             minValue: Constants.minFadeSpeed,
             maxValue: Constants.maxFadeSpeed,
             initialValue: preferencesService.fadeSpeed,
-            unitText: "s"
+            unitText: "s",
+            isDiscrete: true,
+            numberOfTickMarks: 5,  // 5 tick marks for 1, 2, 3, 4, 5 seconds
+            allowsMiddleValues: false
         )
         fadeSpeedView.onValueChanged = { [weak self] newValue in
             self?.preferencesService.fadeSpeed = newValue
         }
+        fadeSpeedView.frame = NSRect(x: 0, y: 0, width: 280, height: 70)
         fadeSpeedItem.view = fadeSpeedView
         menu.addItem(fadeSpeedItem)
         self.fadeSpeedView = fadeSpeedView
         
         // Blink Threshold slider
         let blinkThresholdItem = NSMenuItem()
-        let blinkThresholdView = MenuSliderView(
-            frame: NSRect(x: 0, y: 0, width: 280, height: 80),
+        let blinkThresholdView = BetterMenuSliderView(
             title: "Time Between Blinks",
             minValue: Constants.minBlinkThreshold,
             maxValue: Constants.maxBlinkThreshold,
             initialValue: preferencesService.blinkThreshold,
-            unitText: "s"
+            unitText: "s",
+            isDiscrete: true,
+            numberOfTickMarks: 10,  // 10 tick marks for values between 3-12
+            allowsMiddleValues: false
         )
         blinkThresholdView.onValueChanged = { [weak self] newValue in
             self?.preferencesService.blinkThreshold = newValue
         }
+        blinkThresholdView.frame = NSRect(x: 0, y: 0, width: 280, height: 70)
         blinkThresholdItem.view = blinkThresholdView
         menu.addItem(blinkThresholdItem)
         self.blinkThresholdView = blinkThresholdView
+        
+        // Add EAR Sensitivity slider with custom labels
+        let earSensitivityItem = NSMenuItem()
+        let earSensitivityView = BetterMenuSliderView(
+            title: "Blink Sensitivity",
+            minValue: Constants.minEARSensitivity,
+            maxValue: Constants.maxEARSensitivity,
+            initialValue: preferencesService.earSensitivity,
+            unitText: "",
+            isDiscrete: true,
+            numberOfTickMarks: 3,  // 3 tick marks for low, med, high
+            allowsMiddleValues: false,
+            customTextValues: ["low", "med", "high"]
+        )
+        earSensitivityView.onValueChanged = { [weak self] newValue in
+            self?.preferencesService.earSensitivity = newValue
+        }
+        earSensitivityView.frame = NSRect(x: 0, y: 0, width: 280, height: 70)
+        earSensitivityItem.view = earSensitivityView
+        menu.addItem(earSensitivityItem)
+        self.earSensitivityView = earSensitivityView
         
         // Add section header for features
         let featuresHeader = createSectionHeader("Features")
@@ -484,43 +482,58 @@ class StatusBarController {
         let eyeTrackingItem = NSMenuItem(title: "Enable Eye Tracking", action: #selector(toggleEyeTracking(_:)), keyEquivalent: "")
         eyeTrackingItem.state = preferencesService.eyeTrackingEnabled ? .on : .off
         eyeTrackingItem.target = self
-        
-        // Set standard font size for the eye tracking menu item
-        let eyeTrackingFont = NSFont.systemFont(ofSize: 13)
-        eyeTrackingItem.attributedTitle = NSAttributedString(
-            string: "Enable Eye Tracking",
-            attributes: [.font: eyeTrackingFont]
-        )
-        
         menu.addItem(eyeTrackingItem)
     }
     
-    // Helper to create section headers
+    // Helper to create section headers using standard system styling
     private func createSectionHeader(_ title: String) -> NSMenuItem {
+        // Create a section header menu item using the standard system appearance
         let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-        let headerFont = NSFont.boldSystemFont(ofSize: 13)
+        
+        // Use system font with standard header styling
         let attributes: [NSAttributedString.Key: Any] = [
-            .font: headerFont,
-            .foregroundColor: NSColor.secondaryLabelColor
+            .font: NSFont.systemFont(ofSize: NSFont.systemFontSize, weight: .semibold),
+            .foregroundColor: NSColor.labelColor
         ]
+        
+        // Create attributed title
         item.attributedTitle = NSAttributedString(string: title, attributes: attributes)
+        
+        // Disable the item so it can't be selected
         item.isEnabled = false
+        
         return item
     }
     
     @objc private func showHowItWorks() {
-        let alert = NSAlert()
-        alert.messageText = "How BlinkMore Works"
-        alert.informativeText = "BlinkMore uses your camera to detect when you're not blinking enough.\n\n" +
-                                "1. When your eyes stay open too long, the screen gradually fades.\n" +
-                                "2. This subtle reminder helps you remember to blink regularly.\n" +
-                                "3. Blinking keeps your eyes moisturized and reduces eye strain.\n\n" +
-                                "Intended Use:\n" +
-                                "1. Designed for Mac's with built-in camera.\n" +
-                                "2. Clear view of eyes. Obstructions like glasses or an eye patch might cause blink detection to fail."
+        // Create a panel-style window
+        let window = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 400, height: 340),
+            styleMask: [.titled, .closable, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
         
-        alert.addButton(withTitle: "Got it!")
-        alert.runModal()
+        window.title = "How BlinkMore Works"
+        window.isFloatingPanel = true
+        window.becomesKeyOnlyIfNeeded = true
+        window.level = NSWindow.Level.floating
+        
+        // Position window below menu bar near the status item
+        if let button = statusItem.button, let frame = button.window?.frame {
+            let xPosition = frame.origin.x
+            window.setFrameTopLeftPoint(NSPoint(x: xPosition, y: frame.origin.y - 10))
+        } else {
+            window.center()
+        }
+        
+        // Create the content
+        let contentView = NSHostingView(rootView: HowItWorksView())
+        window.contentView = contentView
+        
+        // Show the window
+        window.makeKeyAndOrderFront(nil as AnyObject?)
+        NSApp.activate(ignoringOtherApps: true)
     }
     
     @objc private func toggleEyeTracking(_ sender: NSMenuItem) {
@@ -673,10 +686,53 @@ class StatusBarController {
     }
     
     @objc private func menuWillClose(_ notification: Notification) {
-        // We no longer need special handling to keep the color panel open
         // when the menu closes - this follows standard macOS behavior
+    }
+    
+    // Add a new public method to start eye tracking after permissions are verified
+    func initializeEyeTrackingIfEnabled() {
+        if preferencesService.eyeTrackingEnabled {
+            initializeEyeTracking()
+        }
     }
 }
 
-// Placeholder for EyeTrackingService that will be implemented later has been removed
-// since it's already implemented in BlinkMore/Services/EyeTrackingService.swift 
+// SwiftUI view for the help content
+struct HowItWorksView: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("BlinkMore uses your camera to detect when you're not blinking enough.")
+                .multilineTextAlignment(.leading)
+            
+            Text("When your eyes stay open too long, the screen gradually fades as a gentle reminder to blink regularly, helping keep your eyes moisturized and reducing eye strain.")
+                .multilineTextAlignment(.leading)
+                .padding(.bottom, 4)
+            
+            Text("Blink Sensitivity:")
+                .fontWeight(.semibold)
+            
+            VStack(alignment: .leading, spacing: 6) {
+                Text("• Low: Only detects pronounced blinks")
+                Text("• Med: Balanced sensitivity for most users")
+                Text("• High: Detects even subtle eye closures")
+            }
+            .padding(.leading, 8)
+            
+            Text("Works best with a clear view of your eyes on Mac's built-in camera.")
+                .padding(.top, 4)
+                .multilineTextAlignment(.leading)
+            
+            Spacer()
+            
+            Button("Close") {
+                if let window = NSApplication.shared.keyWindow {
+                    window.close()
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 8)
+        }
+        .padding()
+        .frame(minWidth: 400, maxWidth: .infinity, minHeight: 280, maxHeight: .infinity)
+    }
+}
