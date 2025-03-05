@@ -294,11 +294,10 @@ class StatusBarController {
         helpItem.target = self
         menu.addItem(helpItem)
         
-        // Add credit menu item at the bottom with smaller text
+        // Add credit menu item at the bottom
         let creditItem = NSMenuItem(title: "", action: #selector(openGitHub), keyEquivalent: "")
-        let creditFont = NSFont.systemFont(ofSize: 11, weight: .regular) // Smaller font size
         let creditAttributes: [NSAttributedString.Key: Any] = [
-            .font: creditFont,
+            .font: NSFont.systemFont(ofSize: NSFont.systemFontSize, weight: .regular),
             .foregroundColor: NSColor.labelColor
         ]
         let creditAttributedTitle = NSAttributedString(string: "Made with ❤️ by oxremy", attributes: creditAttributes)
@@ -389,49 +388,15 @@ class StatusBarController {
     }
     
     private func addPreferencesToMenu() {
-        // Add section headers with standard system style
-        let appearanceHeader = createSectionHeader("Appearance")
-        menu.addItem(appearanceHeader)
+        // Add section header for features (moved to top)
+        let featuresHeader = createSectionHeader("Features")
+        menu.addItem(featuresHeader)
         
-        // Add Fade Color picker with improved layout
-        let colorPickerItem = NSMenuItem()
-        let colorPickerView = BetterMenuColorPickerView(
-            title: "Fade Color",
-            initialColor: preferencesService.fadeColor
-        )
-        colorPickerView.onColorChanged = { [weak self] newColor in
-            DispatchQueue.main.async {
-                self?.preferencesService.fadeColor = newColor
-            }
-        }
-        colorPickerView.frame = NSRect(x: 0, y: 0, width: 280, height: 50)
-        colorPickerItem.view = colorPickerView
-        menu.addItem(colorPickerItem)
-        self.colorPickerView = colorPickerView
-        
-        // Add section header for timing controls
-        let timingHeader = createSectionHeader("Timing")
-        menu.addItem(timingHeader)
-        
-        // Fade Speed slider
-        let fadeSpeedItem = NSMenuItem()
-        let fadeSpeedView = BetterMenuSliderView(
-            title: "Fade Duration",
-            minValue: Constants.minFadeSpeed,
-            maxValue: Constants.maxFadeSpeed,
-            initialValue: preferencesService.fadeSpeed,
-            unitText: "s",
-            isDiscrete: true,
-            numberOfTickMarks: 5,  // 5 tick marks for 1, 2, 3, 4, 5 seconds
-            allowsMiddleValues: false
-        )
-        fadeSpeedView.onValueChanged = { [weak self] newValue in
-            self?.preferencesService.fadeSpeed = newValue
-        }
-        fadeSpeedView.frame = NSRect(x: 0, y: 0, width: 280, height: 70)
-        fadeSpeedItem.view = fadeSpeedView
-        menu.addItem(fadeSpeedItem)
-        self.fadeSpeedView = fadeSpeedView
+        // Add Eye Tracking toggle as a separate menu item (moved to top)
+        let eyeTrackingItem = NSMenuItem(title: "Enable Eye Tracking", action: #selector(toggleEyeTracking(_:)), keyEquivalent: "")
+        eyeTrackingItem.state = preferencesService.eyeTrackingEnabled ? .on : .off
+        eyeTrackingItem.target = self
+        menu.addItem(eyeTrackingItem)
         
         // Blink Threshold slider
         let blinkThresholdItem = NSMenuItem()
@@ -452,6 +417,26 @@ class StatusBarController {
         blinkThresholdItem.view = blinkThresholdView
         menu.addItem(blinkThresholdItem)
         self.blinkThresholdView = blinkThresholdView
+        
+        // Fade Speed slider (moved below Time Between Blinks)
+        let fadeSpeedItem = NSMenuItem()
+        let fadeSpeedView = BetterMenuSliderView(
+            title: "Fade Duration",
+            minValue: Constants.minFadeSpeed,
+            maxValue: Constants.maxFadeSpeed,
+            initialValue: preferencesService.fadeSpeed,
+            unitText: "s",
+            isDiscrete: true,
+            numberOfTickMarks: 5,  // 5 tick marks for 1, 2, 3, 4, 5 seconds
+            allowsMiddleValues: false
+        )
+        fadeSpeedView.onValueChanged = { [weak self] newValue in
+            self?.preferencesService.fadeSpeed = newValue
+        }
+        fadeSpeedView.frame = NSRect(x: 0, y: 0, width: 280, height: 70)
+        fadeSpeedItem.view = fadeSpeedView
+        menu.addItem(fadeSpeedItem)
+        self.fadeSpeedView = fadeSpeedView
         
         // Add EAR Sensitivity slider with custom labels
         let earSensitivityItem = NSMenuItem()
@@ -474,15 +459,21 @@ class StatusBarController {
         menu.addItem(earSensitivityItem)
         self.earSensitivityView = earSensitivityView
         
-        // Add section header for features
-        let featuresHeader = createSectionHeader("Features")
-        menu.addItem(featuresHeader)
-        
-        // Add Eye Tracking toggle as a separate menu item
-        let eyeTrackingItem = NSMenuItem(title: "Enable Eye Tracking", action: #selector(toggleEyeTracking(_:)), keyEquivalent: "")
-        eyeTrackingItem.state = preferencesService.eyeTrackingEnabled ? .on : .off
-        eyeTrackingItem.target = self
-        menu.addItem(eyeTrackingItem)
+        // Add Fade Color picker with improved layout (moved to bottom)
+        let colorPickerItem = NSMenuItem()
+        let colorPickerView = BetterMenuColorPickerView(
+            title: "Fade Color",
+            initialColor: preferencesService.fadeColor
+        )
+        colorPickerView.onColorChanged = { [weak self] newColor in
+            DispatchQueue.main.async {
+                self?.preferencesService.fadeColor = newColor
+            }
+        }
+        colorPickerView.frame = NSRect(x: 0, y: 0, width: 280, height: 50)
+        colorPickerItem.view = colorPickerView
+        menu.addItem(colorPickerItem)
+        self.colorPickerView = colorPickerView
     }
     
     // Helper to create section headers using standard system styling
