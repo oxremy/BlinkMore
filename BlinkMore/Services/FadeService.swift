@@ -227,23 +227,33 @@ class FadeService: ObservableObject {
         print("Removing fade with duration \(Constants.fadeOutDuration)")
     }
     
-    private func updateFadeColor(_ color: NSColor) {
+    func updateFadeColor(_ color: NSColor, animated: Bool = true) {
+        // Update even if not currently faded so it's ready for next fade
+        
         fadeWindows.forEach { window in
             if let hostingView = window.contentView as? NSHostingView<FadeView> {
                 // Get the current opacity value
                 let currentOpacity = hostingView.rootView.opacity
                 
+                // Calculate appropriate animation duration based on context
+                let animationDuration: Double
+                if animated {
+                    animationDuration = isFaded ? 0.2 : 0.0 // Only animate if visible
+                } else {
+                    animationDuration = 0.0 // No animation on demand
+                }
+                
                 // Create a new view with current opacity but new color
                 let newView = FadeView(
                     opacity: .constant(currentOpacity), 
                     color: color,
-                    animationDuration: 0.2 // Short animation for color change
+                    animationDuration: animationDuration
                 )
                 hostingView.rootView = newView
             }
         }
         
-        print("Updated fade color to \(color)")
+        print("Updated fade color to \(color), animated: \(animated)")
     }
     
     // Handle system wake events

@@ -157,6 +157,7 @@ class BetterMenuColorPickerView: NSView {
     private let stackView = NSStackView()
     private let titleLabel = NSTextField(labelWithString: "")
     private let colorWell = NSColorWell()
+    private var colorChangeDebouncer: Timer?
     
     var color: NSColor {
         get { return colorWell.color }
@@ -164,6 +165,7 @@ class BetterMenuColorPickerView: NSView {
     }
     
     var onColorChanged: ((NSColor) -> Void)?
+    var onColorWellClicked: (() -> Void)?
     
     init(title: String, initialColor: NSColor) {
         super.init(frame: .zero)
@@ -180,7 +182,7 @@ class BetterMenuColorPickerView: NSView {
         // Configure color well
         colorWell.color = initialColor
         colorWell.target = self
-        colorWell.action = #selector(colorChanged(_:))
+        colorWell.action = #selector(colorWellAction(_:))
         
         // Set fixed size for the color well
         colorWell.setContentHuggingPriority(.defaultHigh, for: .horizontal)
@@ -226,15 +228,47 @@ class BetterMenuColorPickerView: NSView {
     
     deinit {
         NotificationCenter.default.removeObserver(self)
+        colorChangeDebouncer?.invalidate()
     }
     
-    @objc private func colorChanged(_ sender: NSColorWell) {
-        onColorChanged?(sender.color)
+    @objc private func colorWellAction(_ sender: NSColorWell) {
+        // Notify that color well was clicked to configure the panel
+        onColorWellClicked?()
+        
+        // Keep parent menu open when color panel is active
+        if let menu = self.enclosingMenuItem?.menu {
+            // Use private API for menu tracking mode
+            let keepMenuOpenSEL = NSSelectorFromString("_setMenuTrackingMode:")
+            if menu.responds(to: keepMenuOpenSEL) {
+                let imp = menu.method(for: keepMenuOpenSEL)
+                let function = unsafeBitCast(imp, to: (@convention(c) (NSObject, Selector, Int) -> Void).self)
+                function(menu, keepMenuOpenSEL, 1) // Mode 1 = sticky tracking
+            }
+        }
+        
+        // Cancel any pending debounce timer
+        colorChangeDebouncer?.invalidate()
+        
+        // Create a new debounce timer
+        colorChangeDebouncer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: false) { [weak self] _ in
+            self?.onColorChanged?(sender.color)
+        }
     }
     
     @objc private func colorPanelDidClose(_ notification: Notification) {
-        // Ensure we capture the final color
-        onColorChanged?(colorWell.color)
+        // Cancel any pending debounce
+        colorChangeDebouncer?.invalidate()
+        colorChangeDebouncer = nil
+        
+        // Use the shared color panel's current color - more reliable than colorWell.color
+        // as it captures any unsaved changes in the panel
+        let panelColor = NSColorPanel.shared.color
+        
+        // Update the color and notify
+        onColorChanged?(panelColor)
+        
+        // Sync the color well with the final selection
+        colorWell.color = panelColor
     }
 }
 
@@ -371,6 +405,9 @@ class StatusBarController {
             name: NSMenu.didEndTrackingNotification,
             object: menu
         )
+        
+        // Add this method after the init() method
+        configureSystemColorPanel()
     }
     
     deinit {
@@ -465,9 +502,22 @@ class StatusBarController {
             title: "Fade Color",
             initialColor: preferencesService.fadeColor
         )
+        colorPickerView.onColorWellClicked = { [weak self] in
+            self?.configureSystemColorPanel()
+        }
         colorPickerView.onColorChanged = { [weak self] newColor in
-            DispatchQueue.main.async {
-                self?.preferencesService.fadeColor = newColor
+            guard let self = self else { return }
+            
+            // During active color selection, update UI without persisting
+            if NSColorPanel.shared.isVisible {
+                // Preview the color change but don't persist yet
+                self.preferencesService.updatePreferenceWithoutSaving(\.fadeColor, to: newColor)
+                self.fadeService.updateFadeColor(newColor, animated: true)
+            } else {
+                // Color panel closed, persist the final selection
+                DispatchQueue.main.async {
+                    self.preferencesService.fadeColor = newColor
+                }
             }
         }
         colorPickerView.frame = NSRect(x: 0, y: 0, width: 280, height: 50)
@@ -510,10 +560,12 @@ class StatusBarController {
         window.becomesKeyOnlyIfNeeded = true
         window.level = NSWindow.Level.floating
         
-        // Position window below menu bar near the status item
-        if let button = statusItem.button, let frame = button.window?.frame {
-            let xPosition = frame.origin.x
-            window.setFrameTopLeftPoint(NSPoint(x: xPosition, y: frame.origin.y - 10))
+        // Position window at top center of screen
+        if let screenFrame = NSScreen.main?.visibleFrame {
+            let windowWidth = window.frame.width
+            let xPosition = screenFrame.origin.x + (screenFrame.width - windowWidth) / 2
+            let yPosition = screenFrame.origin.y + screenFrame.height - 10 // 10px from top of screen
+            window.setFrameTopLeftPoint(NSPoint(x: xPosition, y: yPosition))
         } else {
             window.center()
         }
@@ -669,6 +721,10 @@ class StatusBarController {
     private var fadeDelayWorkItem: DispatchWorkItem?
     
     @objc private func quitApplication() {
+        // First prepare for termination
+        prepareForAppTermination()
+        
+        // Then terminate the app
         NSApplication.shared.terminate(self)
     }
     
@@ -685,6 +741,55 @@ class StatusBarController {
         if preferencesService.eyeTrackingEnabled {
             initializeEyeTracking()
         }
+    }
+    
+    // Add this method after the init() method
+    private func configureSystemColorPanel() {
+        let panel = NSColorPanel.shared
+        
+        // Remove showsAlpha and mode settings as they shouldn't be part of the app
+        
+        // Set position to top center
+        let screenFrame = NSScreen.main?.visibleFrame ?? NSRect.zero
+        let panelFrame = panel.frame
+        let posX = screenFrame.origin.x + (screenFrame.width - panelFrame.width) / 2 // Center horizontally
+        let posY = screenFrame.origin.y + screenFrame.height - panelFrame.height - 40 // Position near top
+        panel.setFrameOrigin(NSPoint(x: posX, y: posY))
+        
+        // Restore panel settings on app relaunch - keep only this part
+        if let savedMode = UserDefaults.standard.object(forKey: "lastColorPanelMode") as? Int,
+           let colorMode = NSColorPanel.Mode(rawValue: savedMode) {
+            panel.mode = colorMode
+        }
+    }
+    
+    // Add this method to save color panel settings when app terminates
+    @objc private func applicationWillTerminate(_ notification: Notification) {
+        let panel = NSColorPanel.shared
+        UserDefaults.standard.set(panel.mode.rawValue, forKey: "lastColorPanelMode")
+    }
+    
+    // Add this new method for app termination preparation
+    func prepareForAppTermination() {
+        print("Preparing StatusBarController for app termination")
+        
+        // Cancel any pending fade operations
+        fadeDelayWorkItem?.cancel()
+        fadeDelayWorkItem = nil
+        
+        // Cancel all eye tracking subscriptions first
+        eyeTrackingCancelBag.removeAll()
+        
+        // Stop eye tracking and ensure it's properly cleaned up
+        if let trackingService = eyeTrackingService {
+            // Use the new prepareForTermination method we added
+            trackingService.prepareForTermination()
+        }
+        
+        // Release the service reference
+        eyeTrackingService = nil
+        
+        print("StatusBarController termination preparation completed")
     }
 }
 

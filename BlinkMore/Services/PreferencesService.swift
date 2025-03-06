@@ -133,12 +133,14 @@ class PreferencesService: ObservableObject {
         $fadeColor
             .dropFirst()
             .sink { [weak self] newColor in
+                guard let self = self, !self.shouldSkipSaving else { return }
+                
                 do {
                     let colorData = try NSKeyedArchiver.archivedData(
                         withRootObject: newColor,
                         requiringSecureCoding: false
                     )
-                    self?.defaults.set(colorData, forKey: Constants.UserDefaultsKeys.fadeColor)
+                    self.defaults.set(colorData, forKey: Constants.UserDefaultsKeys.fadeColor)
                     print("Color saved to preferences: \(newColor)")
                 } catch {
                     print("Failed to archive color: \(error)")
@@ -170,4 +172,23 @@ class PreferencesService: ObservableObject {
     
     // Add a property to store cancellables
     private var cancellables = Set<AnyCancellable>()
+    
+    // Add a new method to update preferences without triggering a save
+    private var shouldSkipSaving = false
+
+    func updatePreferenceWithoutSaving(_ preference: WritableKeyPath<PreferencesService, NSColor>, to value: NSColor) {
+        // Update value without triggering a userDefaults save
+        withoutSavingTrigger {
+            // Direct property assignment instead of using key path
+            if preference == \PreferencesService.fadeColor {
+                self.fadeColor = value
+            }
+        }
+    }
+
+    private func withoutSavingTrigger(_ action: () -> Void) {
+        shouldSkipSaving = true
+        action()
+        shouldSkipSaving = false
+    }
 } 

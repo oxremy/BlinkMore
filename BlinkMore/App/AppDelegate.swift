@@ -70,6 +70,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     func applicationWillTerminate(_ notification: Notification) {
-        // Clean up resources if needed
+        print("Application will terminate - starting cleanup")
+        
+        // Give status bar controller a chance to clean up resources
+        statusBarController.prepareForAppTermination()
+        
+        // Wait briefly to allow cleanup to complete
+        Thread.sleep(forTimeInterval: 0.2)
+        
+        print("Application termination cleanup completed")
     }
 } 

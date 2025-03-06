@@ -38,6 +38,11 @@ class EyeTrackingService: NSObject, ObservableObject, AVCaptureVideoDataOutputSa
         return cachedEARSensitivity
     }
     
+    // State tracking properties to prevent race conditions
+    private var isCleaningUp = false
+    private var isStoppingTracking = false
+    private var trackingStopTime: Date?
+    
     // Reference to preferences service
     private let preferencesService = PreferencesService.shared
     
@@ -55,35 +60,64 @@ class EyeTrackingService: NSObject, ObservableObject, AVCaptureVideoDataOutputSa
         // Clean up cancellables
         cancellables.removeAll()
         
-        // Make sure to clean up resources on the main thread
+        // Avoid potential deadlock by checking thread and using appropriate approach
         if Thread.isMainThread {
-            self.cleanupResources()
+            // Only clean up if not already cleaning up
+            if !isCleaningUp {
+                isCleaningUp = true
+                self.cleanupResources() 
+            }
         } else {
-            DispatchQueue.main.sync {
+            // Never use sync in deinit - use async instead
+            isCleaningUp = true
+            DispatchQueue.main.async {
                 self.cleanupResources()
             }
         }
+        
+        print("EyeTrackingService deinit complete")
     }
     
     private func cleanupResources() {
-        // Stop tracking and release capture session resources
+        // Track cleanup start time for logging
+        let startTime = Date()
+        print("Starting camera resource cleanup")
+        
+        // Stop tracking first if needed
         if let session = captureSession, session.isRunning {
-            session.stopRunning()
+            // Try to stop on the session's queue for thread safety
+            captureSessionQueue.sync {
+                session.stopRunning()
+            }
+            print("Stopped running capture session")
         }
         
-        // Remove sample buffer delegate to avoid potential retain cycles
+        // Explicitly set sample buffer delegate to nil
         videoDataOutput?.setSampleBufferDelegate(nil, queue: nil)
+        
+        // Force device unlocking in case it was locked for configuration
+        if let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front),
+           (try? device.lockForConfiguration()) != nil {
+            device.unlockForConfiguration()
+            print("Unlocked camera device configuration")
+        }
         
         // Release references
         videoDataOutput = nil
         captureSession = nil
         
-        print("EyeTrackingService resources cleaned up")
+        print("Camera resources cleaned up - took \(Date().timeIntervalSince(startTime)) seconds")
     }
     
     // MARK: - Setup and Configuration
     
     func startTracking() {
+        // Make sure we're not in the middle of stopping
+        if isStoppingTracking {
+            print("Cannot start tracking while stop is in progress - try again later")
+            return
+        }
+        
         // Update cached preferences before starting
         updateCachedPreferences()
         
@@ -113,23 +147,70 @@ class EyeTrackingService: NSObject, ObservableObject, AVCaptureVideoDataOutputSa
     }
     
     func stopTracking() {
+        // Prevent multiple simultaneous stop calls
+        if isStoppingTracking {
+            print("Stop tracking already in progress, ignoring duplicate call")
+            return
+        }
+        
+        isStoppingTracking = true
+        trackingStopTime = Date()
+        
         // Clear preference listeners when stopping
         cancellables.removeAll()
         
-        // Stop the capture session on a background queue
+        // Stop the capture session on the session queue
         captureSessionQueue.async { [weak self] in
             guard let self = self else { return }
             
             if let session = self.captureSession, session.isRunning {
                 session.stopRunning()
                 
+                // Add a small delay to ensure AVFoundation has time to release resources
+                Thread.sleep(forTimeInterval: 0.1)
+                
                 DispatchQueue.main.async {
                     self.isActive = false
                     self.isEyeOpen = false // Reset eye state
+                    self.isStoppingTracking = false
+                    if let stopTime = self.trackingStopTime {
+                        print("Eye tracking stopped - took \(Date().timeIntervalSince(stopTime)) seconds")
+                    } else {
+                        print("Eye tracking stopped")
+                    }
+                }
+            } else {
+                DispatchQueue.main.async {
+                    self.isStoppingTracking = false
+                }
+            }
+        }
+    }
+    
+    // Public method to force synchronous cleanup for app termination
+    func prepareForTermination() {
+        print("Preparing eye tracking for termination")
+        // Cleanup resources synchronously
+        if !isCleaningUp {
+            isCleaningUp = true
+            
+            // Cancel any pending operations
+            cancellables.removeAll()
+            
+            // Force stop on session queue
+            captureSessionQueue.sync {
+                if let session = self.captureSession, session.isRunning {
+                    session.stopRunning()
+                    Thread.sleep(forTimeInterval: 0.1) // Brief pause for cleanup
                 }
                 
-                print("Eye tracking stopped")
+                // Clean up on session queue to avoid threading issues
+                self.videoDataOutput?.setSampleBufferDelegate(nil, queue: nil)
+                self.videoDataOutput = nil
+                self.captureSession = nil
             }
+            
+            print("Eye tracking termination preparation complete")
         }
     }
     
