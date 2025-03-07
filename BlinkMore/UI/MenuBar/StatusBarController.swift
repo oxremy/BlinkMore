@@ -549,7 +549,7 @@ class StatusBarController {
     @objc private func showHowItWorks() {
         // Create a panel-style window
         let window = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 400, height: 340),
+            contentRect: NSRect(x: 0, y: 0, width: 700, height: 500),
             styleMask: [.titled, .closable, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -796,39 +796,71 @@ class StatusBarController {
 // SwiftUI view for the help content
 struct HowItWorksView: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("BlinkMore uses your camera to detect when you're not blinking enough.")
-                .multilineTextAlignment(.leading)
-            
-            Text("When your eyes stay open too long, the screen gradually fades as a gentle reminder to blink regularly, helping keep your eyes moisturized and reducing eye strain.")
-                .multilineTextAlignment(.leading)
-                .padding(.bottom, 4)
-            
-            Text("Blink Sensitivity:")
-                .fontWeight(.semibold)
-            
-            VStack(alignment: .leading, spacing: 6) {
-                Text("• Low: Only detects pronounced blinks")
-                Text("• Med: Balanced sensitivity for most users")
-                Text("• High: Detects even subtle eye closures")
-            }
-            .padding(.leading, 8)
-            
-            Text("Works best with a clear view of your eyes on Mac's built-in camera.")
-                .padding(.top, 4)
-                .multilineTextAlignment(.leading)
-            
-            Spacer()
-            
-            Button("Close") {
-                if let window = NSApplication.shared.keyWindow {
-                    window.close()
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("BlinkMore is your personal eye-care buddy, designed to help you blink more. It uses your Mac's built-in camera for eye-tracking and encoruages you to blink when you've been staring too long—keeping your eyes lubricated and refreshed.")
+                    .multilineTextAlignment(.leading)
+                
+                Text("Here's the simple rundown:")
+                    .fontWeight(.medium)
+                    .padding(.top, 8)
+                    .multilineTextAlignment(.leading)
+                
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .top) {
+                        Text("•")
+                        Text("Eye Check: The app uses your camera to notice if your eyes have been open for a while without blinking. When it's time, it fades your screen a little to nudge you to blink—no harsh interruptions, just a soft hint!")
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    
+                    HStack(alignment: .top) {
+                        Text("•")
+                        Text("Privacy First: Everything happens right on your Mac—no data leaves your device or sticks around after you close the app.")
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    
+                    HStack(alignment: .top) {
+                        Text("•")
+                        Text("Customizable Comfort: You can adjust how fast the screen fades, how often it reminds you, and even pick the fade color—whatever feels right for you.")
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
+                
+                Text("Tips for the Best Experience:")
+                    .fontWeight(.medium)
+                    .padding(.top, 8)
+                    .multilineTextAlignment(.leading)
+                
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .top) {
+                        Text("•")
+                        Text("Make sure your Mac's camera has a clear view of your eyes (heads-up: glasses with certain angles/reflections might obstruct camera view).")
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    
+                    HStack(alignment: .top) {
+                        Text("•")
+                        Text("It's perfect for reading or focusing on text-heavy tasks—just know it uses a good chunk of your Mac's power.")
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                
+                Text("BlinkMore is all about helping you build better screen habits, one blink at a time, so your eyes stay happy!")
+                    .padding(.top, 8)
+                    .multilineTextAlignment(.leading)
+
+                Spacer()
+
+                Button("Close") {
+                    if let window = NSApplication.shared.keyWindow {
+                        window.close()
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, 12)
             }
-            .frame(maxWidth: .infinity)
-            .padding(.top, 8)
+            .padding()
         }
-        .padding()
-        .frame(minWidth: 400, maxWidth: .infinity, minHeight: 280, maxHeight: .infinity)
+        .frame(minWidth: 700, maxWidth: .infinity, minHeight: 500, maxHeight: .infinity)
     }
 }

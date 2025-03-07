@@ -9,7 +9,6 @@ import Foundation
 import Combine
 import AVFoundation
 import Vision
-import CoreML
 import AppKit
 
 class EyeTrackingService: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleBufferDelegate {
