@@ -152,126 +152,6 @@ class BetterMenuSliderView: NSView {
     }
 }
 
-// Custom view for color picker in menu using Auto Layout
-class BetterMenuColorPickerView: NSView {
-    private let stackView = NSStackView()
-    private let titleLabel = NSTextField(labelWithString: "")
-    private let colorWell = NSColorWell()
-    private var colorChangeDebouncer: Timer?
-    
-    var color: NSColor {
-        get { return colorWell.color }
-        set { colorWell.color = newValue }
-    }
-    
-    var onColorChanged: ((NSColor) -> Void)?
-    var onColorWellClicked: (() -> Void)?
-    
-    init(title: String, initialColor: NSColor) {
-        super.init(frame: .zero)
-        
-        // Configure title label
-        titleLabel.stringValue = "\(title):"
-        titleLabel.font = NSFont.systemFont(ofSize: 13)
-        titleLabel.textColor = .labelColor
-        titleLabel.isEditable = false
-        titleLabel.isSelectable = false
-        titleLabel.isBordered = false
-        titleLabel.backgroundColor = .clear
-        
-        // Configure color well
-        colorWell.color = initialColor
-        colorWell.target = self
-        colorWell.action = #selector(colorWellAction(_:))
-        
-        // Set fixed size for the color well
-        colorWell.setContentHuggingPriority(.defaultHigh, for: .horizontal)
-        let sizeConstraint = colorWell.widthAnchor.constraint(equalToConstant: 30)
-        sizeConstraint.isActive = true
-        colorWell.heightAnchor.constraint(equalTo: colorWell.widthAnchor).isActive = true
-        
-        // Set up stack view
-        stackView.orientation = .horizontal
-        stackView.distribution = .fill
-        stackView.spacing = 8
-        stackView.addArrangedSubview(titleLabel)
-        
-        // Add a spacer view for flexible spacing
-        let spacerView = NSView()
-        spacerView.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        stackView.addArrangedSubview(spacerView)
-        
-        stackView.addArrangedSubview(colorWell)
-        
-        // Add to view with proper constraints
-        addSubview(stackView)
-        stackView.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            stackView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
-            stackView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
-            stackView.topAnchor.constraint(equalTo: topAnchor, constant: 10),
-            stackView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10)
-        ])
-        
-        // Observe color panel closing
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(colorPanelDidClose),
-            name: NSColorPanel.willCloseNotification,
-            object: nil
-        )
-    }
-    
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-    
-    deinit {
-        NotificationCenter.default.removeObserver(self)
-        colorChangeDebouncer?.invalidate()
-    }
-    
-    @objc private func colorWellAction(_ sender: NSColorWell) {
-        // Notify that color well was clicked to configure the panel
-        onColorWellClicked?()
-        
-        // Keep parent menu open when color panel is active
-        if let menu = self.enclosingMenuItem?.menu {
-            // Use private API for menu tracking mode
-            let keepMenuOpenSEL = NSSelectorFromString("_setMenuTrackingMode:")
-            if menu.responds(to: keepMenuOpenSEL) {
-                let imp = menu.method(for: keepMenuOpenSEL)
-                let function = unsafeBitCast(imp, to: (@convention(c) (NSObject, Selector, Int) -> Void).self)
-                function(menu, keepMenuOpenSEL, 1) // Mode 1 = sticky tracking
-            }
-        }
-        
-        // Cancel any pending debounce timer
-        colorChangeDebouncer?.invalidate()
-        
-        // Create a new debounce timer
-        colorChangeDebouncer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: false) { [weak self] _ in
-            self?.onColorChanged?(sender.color)
-        }
-    }
-    
-    @objc private func colorPanelDidClose(_ notification: Notification) {
-        // Cancel any pending debounce
-        colorChangeDebouncer?.invalidate()
-        colorChangeDebouncer = nil
-        
-        // Use the shared color panel's current color - more reliable than colorWell.color
-        // as it captures any unsaved changes in the panel
-        let panelColor = NSColorPanel.shared.color
-        
-        // Update the color and notify
-        onColorChanged?(panelColor)
-        
-        // Sync the color well with the final selection
-        colorWell.color = panelColor
-    }
-}
-
 class StatusBarController {
     private var statusItem: NSStatusItem
     private var menu: NSMenu
@@ -282,7 +162,6 @@ class StatusBarController {
     private var fadeSpeedView: BetterMenuSliderView?
     private var blinkThresholdView: BetterMenuSliderView?
     private var earSensitivityView: BetterMenuSliderView?
-    private var colorPickerView: BetterMenuColorPickerView?
     
     private var cancelBag = Set<AnyCancellable>()
     // Separate cancellable set specifically for eye tracking observations
@@ -351,8 +230,8 @@ class StatusBarController {
         preferencesService.$fadeColor
             .receive(on: DispatchQueue.main)
             .sink { [weak self] newColor in
-                // Update color picker UI when preference changes externally
-                self?.colorPickerView?.color = newColor
+                // Update color menu item states when preference changes externally
+                self?.updateColorMenuItemStates(newColor)
             }
             .store(in: &cancelBag)
         
@@ -397,17 +276,6 @@ class StatusBarController {
                 }
             }
             .store(in: &cancelBag)
-        
-        // Make sure color panel is closed when menu closes
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(menuWillClose),
-            name: NSMenu.didEndTrackingNotification,
-            object: menu
-        )
-        
-        // Add this method after the init() method
-        configureSystemColorPanel()
     }
     
     deinit {
@@ -417,11 +285,6 @@ class StatusBarController {
         // Clean up cancellables
         cancelBag.removeAll()
         eyeTrackingCancelBag.removeAll()
-        
-        // Make sure color panel is closed
-        if NSColorPanel.shared.isVisible {
-            NSColorPanel.shared.close()
-        }
     }
     
     private func addPreferencesToMenu() {
@@ -496,34 +359,61 @@ class StatusBarController {
         menu.addItem(earSensitivityItem)
         self.earSensitivityView = earSensitivityView
         
-        // Add Fade Color picker with improved layout (moved to bottom)
-        let colorPickerItem = NSMenuItem()
-        let colorPickerView = BetterMenuColorPickerView(
-            title: "Fade Color",
-            initialColor: preferencesService.fadeColor
-        )
-        colorPickerView.onColorWellClicked = { [weak self] in
-            self?.configureSystemColorPanel()
-        }
-        colorPickerView.onColorChanged = { [weak self] newColor in
-            guard let self = self else { return }
+        // Add Fade Color submenu with predefined colors
+        let colorMenuItem = NSMenuItem(title: "Fade Color", action: nil, keyEquivalent: "")
+        
+        // Create submenu for colors
+        let colorsSubmenu = NSMenu()
+        
+        // Define our 9 predefined colors
+        let predefinedColors: [(name: String, color: NSColor)] = [
+            ("Black", .black),
+            ("Gray", .gray),
+            ("White", .white),
+            ("Red", NSColor(calibratedRed: 0.9, green: 0.2, blue: 0.2, alpha: 1.0)),
+            ("Purple", NSColor(calibratedRed: 0.6, green: 0.2, blue: 0.8, alpha: 1.0)),
+            ("Blue", NSColor(calibratedRed: 0.2, green: 0.4, blue: 0.9, alpha: 1.0)),
+            ("Green", NSColor(calibratedRed: 0.2, green: 0.7, blue: 0.3, alpha: 1.0)),
+            ("Yellow", NSColor(calibratedRed: 0.9, green: 0.8, blue: 0.2, alpha: 1.0)),
+            ("Orange", NSColor(calibratedRed: 0.9, green: 0.5, blue: 0.1, alpha: 1.0))
+        ]
+        
+        // Add each color as a menu item
+        for (name, color) in predefinedColors {
+            let colorItem = NSMenuItem(title: name, action: #selector(colorMenuItemSelected(_:)), keyEquivalent: "")
+            colorItem.target = self
             
-            // During active color selection, update UI without persisting
-            if NSColorPanel.shared.isVisible {
-                // Preview the color change but don't persist yet
-                self.preferencesService.updatePreferenceWithoutSaving(\.fadeColor, to: newColor)
-                self.fadeService.updateFadeColor(newColor, animated: true)
-            } else {
-                // Color panel closed, persist the final selection
-                DispatchQueue.main.async {
-                    self.preferencesService.fadeColor = newColor
-                }
+            // Create a small colored view to show the color
+            let colorView = NSView(frame: NSRect(x: 0, y: 0, width: 14, height: 14))
+            colorView.wantsLayer = true
+            colorView.layer?.backgroundColor = color.cgColor
+            colorView.layer?.cornerRadius = 7 // Make it round
+            colorView.layer?.borderWidth = 1
+            colorView.layer?.borderColor = NSColor.gray.withAlphaComponent(0.5).cgColor
+            
+            // Create an image from the view
+            let colorImage = NSImage(size: colorView.bounds.size)
+            colorImage.lockFocus()
+            colorView.layer?.render(in: NSGraphicsContext.current!.cgContext)
+            colorImage.unlockFocus()
+            
+            // Set the image and add a tag to identify the color
+            colorItem.image = colorImage
+            
+            // Store the color as a property of the menu item
+            colorItem.representedObject = color
+            
+            // Check the current color
+            if self.preferencesService.fadeColor.isClose(to: color) {
+                colorItem.state = .on
             }
+            
+            colorsSubmenu.addItem(colorItem)
         }
-        colorPickerView.frame = NSRect(x: 0, y: 0, width: 280, height: 50)
-        colorPickerItem.view = colorPickerView
-        menu.addItem(colorPickerItem)
-        self.colorPickerView = colorPickerView
+        
+        // Set the submenu to the menu item
+        colorMenuItem.submenu = colorsSubmenu
+        menu.addItem(colorMenuItem)
     }
     
     // Helper to create section headers using standard system styling
@@ -732,41 +622,41 @@ class StatusBarController {
         NSWorkspace.shared.open(Constants.authorURL)
     }
     
-    @objc private func menuWillClose(_ notification: Notification) {
-        // when the menu closes - this follows standard macOS behavior
+    // Add a new method to update menu item states when color changes externally
+    private func updateColorMenuItemStates(_ newColor: NSColor) {
+        // Find the Fade Color menu item
+        if let colorMenuItem = menu.items.first(where: { $0.title == "Fade Color" }),
+           let submenu = colorMenuItem.submenu {
+            // Update all submenu items
+            for item in submenu.items {
+                if let itemColor = item.representedObject as? NSColor {
+                    item.state = newColor.isClose(to: itemColor) ? .on : .off
+                }
+            }
+        }
     }
     
-    // Add a new public method to start eye tracking after permissions are verified
+    // Add a public method to start eye tracking after permissions are verified
     func initializeEyeTrackingIfEnabled() {
         if preferencesService.eyeTrackingEnabled {
             initializeEyeTracking()
         }
     }
     
-    // Add this method after the init() method
-    private func configureSystemColorPanel() {
-        let panel = NSColorPanel.shared
+    // Add this method to handle color selection
+    @objc private func colorMenuItemSelected(_ sender: NSMenuItem) {
+        guard let color = sender.representedObject as? NSColor else { return }
         
-        // Remove showsAlpha and mode settings as they shouldn't be part of the app
+        // Update preferences and apply color
+        preferencesService.fadeColor = color
+        fadeService.updateFadeColor(color, animated: true)
         
-        // Set position to top center
-        let screenFrame = NSScreen.main?.visibleFrame ?? NSRect.zero
-        let panelFrame = panel.frame
-        let posX = screenFrame.origin.x + (screenFrame.width - panelFrame.width) / 2 // Center horizontally
-        let posY = screenFrame.origin.y + screenFrame.height - panelFrame.height - 40 // Position near top
-        panel.setFrameOrigin(NSPoint(x: posX, y: posY))
-        
-        // Restore panel settings on app relaunch - keep only this part
-        if let savedMode = UserDefaults.standard.object(forKey: "lastColorPanelMode") as? Int,
-           let colorMode = NSColorPanel.Mode(rawValue: savedMode) {
-            panel.mode = colorMode
+        // Update menu item states
+        if let submenu = sender.menu {
+            for item in submenu.items {
+                item.state = (item == sender) ? .on : .off
+            }
         }
-    }
-    
-    // Add this method to save color panel settings when app terminates
-    @objc private func applicationWillTerminate(_ notification: Notification) {
-        let panel = NSColorPanel.shared
-        UserDefaults.standard.set(panel.mode.rawValue, forKey: "lastColorPanelMode")
     }
     
     // Add this new method for app termination preparation
@@ -862,5 +752,35 @@ struct HowItWorksView: View {
             .padding()
         }
         .frame(minWidth: 700, maxWidth: .infinity, minHeight: 500, maxHeight: .infinity)
+    }
+}
+
+// Add this extension to NSColor to check for similar colors (since exact matches might not work)
+extension NSColor {
+    func isClose(to other: NSColor) -> Bool {
+        // Convert both colors to the same color space for comparison
+        guard let selfRGB = self.usingColorSpace(.sRGB),
+              let otherRGB = other.usingColorSpace(.sRGB) else {
+            return false
+        }
+        
+        // Get RGB components
+        var selfRed: CGFloat = 0
+        var selfGreen: CGFloat = 0
+        var selfBlue: CGFloat = 0
+        var otherRed: CGFloat = 0
+        var otherGreen: CGFloat = 0
+        var otherBlue: CGFloat = 0
+        
+        selfRGB.getRed(&selfRed, green: &selfGreen, blue: &selfBlue, alpha: nil)
+        otherRGB.getRed(&otherRed, green: &otherGreen, blue: &otherBlue, alpha: nil)
+        
+        // Check if the colors are close enough (using a threshold)
+        let threshold: CGFloat = 0.1
+        let redDiff = abs(selfRed - otherRed)
+        let greenDiff = abs(selfGreen - otherGreen)
+        let blueDiff = abs(selfBlue - otherBlue)
+        
+        return redDiff < threshold && greenDiff < threshold && blueDiff < threshold
     }
 }
