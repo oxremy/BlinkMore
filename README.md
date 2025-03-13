@@ -3,7 +3,7 @@
 
 # BlinkMoreSE
 
-BlinkMore is an open source macOS menu bar application that helps reduce eye strain by fading your screen to a customizable color when you stare at it for too long without blinking. It uses automated eye-tracking.
+BlinkMore is an open source macOS menu bar application that helps reduce eye strain by fading your screen when you stare at it for too long without blinking. It uses automated eye-tracking.
 
 ## Privacy
 
