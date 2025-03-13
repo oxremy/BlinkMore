@@ -15,8 +15,8 @@ BlinkMore respects your privacy:
 
 ## Requirements
 
-- macOS 15 (Sequoia) or later
-- Buuilt-in front facing camera and permissions
+- macOS 14 (Sonoma) or later 
+- Mac with built-in front facing camera 
 
 ## Credits
 
