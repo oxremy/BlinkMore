@@ -41,7 +41,7 @@ enum Constants {
     static let fadeOutDuration: Double = 0.05 // Instant fade out (50ms)
     
     // Timeout constants
-    static let fadeTimeoutDuration: Double = 15.0 // Auto-disable eye tracking after 15 seconds of continuous fade
+    static let fadeTimeoutDuration: Double = 6.0 // Auto-disable eye tracking after 6 seconds of continuous fade
     
     // URLs
     static let authorURL = URL(string: "https://github.com/oxremy")!
