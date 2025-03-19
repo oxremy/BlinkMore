@@ -3,11 +3,15 @@
 
 # BlinkMoreFree
 
-BlinkMore is an open source macOS menu bar application that helps reduce eye strain by fading your screen when you stare at it for too long without blinking. It uses automated eye-tracking.
+BlinkMoreFree is an open source macOS menu bar application that helps reduce eye strain by fading your screen when you stare at it for too long without blinking. It uses automated eye-tracking.
+
+## Install
+
+Easy install with the Apple notarized BlinkMoreFree.dmg found above. 
 
 ## Privacy
 
-BlinkMore respects your privacy:
+BlinkMoreFree respects your privacy:
 - All processing happens locally on your device
 - No video is ever stored or transmitted
 - The macOS camera indicator light will be on when eye-tracking is active
@@ -25,7 +29,7 @@ Made with ❤️ by [oxremy](https://github.com/oxremy) and AI (Grok/Claude)
 
 ## How It Works
 
-BlinkMore is your personal eye-care buddy, designed to help you blink more. It uses your Mac’s built-in camera for eye-tracking and encoruages you to blink when you’ve been staring too long—keeping your eyes lubricated and refreshed.
+BlinkMoreFree is your personal eye-care buddy, designed to help you blink more. It uses your Mac’s built-in camera for eye-tracking and encoruages you to blink when you’ve been staring too long—keeping your eyes lubricated and refreshed.
 
 Here’s the simple rundown:
 
@@ -38,4 +42,4 @@ Tips for the best experience:
 - Make sure your Mac’s camera has a clear view of your eyes (heads-up: glasses with certain angles/reflections might obstruct camera view).
 - It’s perfect for reading or focusing on text-heavy tasks—just know it uses a good chunk of your Mac’s power. 
 
-BlinkMore is all about helping you build better screen habits, one blink at a time, so your eyes stay happy!
+BlinkMoreFree is all about helping you build better screen habits, one blink at a time, so your eyes stay happy!
