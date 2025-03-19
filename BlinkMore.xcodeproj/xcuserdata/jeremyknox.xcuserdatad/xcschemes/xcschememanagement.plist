@@ -6,8 +6,28 @@
 	<dict>
 		<key>BlinkMore.xcscheme_^#shared#^_</key>
 		<dict>
+			<key>isShown</key>
+			<true/>
 			<key>orderHint</key>
 			<integer>0</integer>
+		</dict>
+	</dict>
+	<key>SuppressBuildableAutocreation</key>
+	<dict>
+		<key>39FED06C2D6CB0E20053C840</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+		<key>39FED07D2D6CB0E30053C840</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+		<key>39FED0872D6CB0E30053C840</key>
+		<dict>
+			<key>primary</key>
+			<true/>
 		</dict>
 	</dict>
 </dict>
