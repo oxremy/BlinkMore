@@ -7,7 +7,7 @@ BlinkMoreFree is an open source macOS menu bar application that helps reduce eye
 
 ## Install
 
-Easy install with the Apple notarized BlinkMoreFree.dmg found above. 
+Download the above BlinkMoreFree.dmg (Apple notarized) for easy install. 
 
 ## Privacy
 
