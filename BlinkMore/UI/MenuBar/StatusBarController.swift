@@ -688,7 +688,7 @@ struct HowItWorksView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                Text("BlinkMoreFree is an open source macOS menu bar application that helps reduce eye strain by fading your screen when you stare at it for too long without blinking. It uses automated eye-tracking.")
+                Text("BlinkMoreFree is an open source macOS menu bar application that helps reduce eye strain by fading your screen when you stare at it for too long without blinking. Using automated eye-tracking and customized settings to encourage you to blink more.")
                     .font(.system(size: 14, weight: .semibold))
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
