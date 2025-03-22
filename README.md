@@ -4,8 +4,8 @@
 
 BlinkMoreFree is an open source macOS menu bar application that helps reduce eye strain by fading your screen when you stare at it for too long without blinking. Using automated eye-tracking and customized settings to encourage you to blink more.
 
-# Buy [BlinkMore](http://oxremy.github.io/BuyBlinkMore/)
-If you like the free version consider [BlinkMore](http://oxremy.github.io/BuyBlinkMore/). The main difference: eye tracking turns on/off based on the app you are using, saving energy by only turning on for apps you choose. 
+# [BlinkMore](http://oxremy.github.io/BuyBlinkMore/)
+If you like the free version consider [BlinkMore](http://oxremy.github.io/BuyBlinkMore/). Main difference: eye tracking turns on/off based on the app you are using, saving energy by only turning on for apps you choose, like text-heavy focused tasks. 
 
 ## Requirements
 
