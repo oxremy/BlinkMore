@@ -25,6 +25,7 @@ enum Constants {
     
     static let defaultFadeColor: NSColor = .black
     static let defaultEyeTrackingEnabled: Bool = false
+    static let defaultAutoDisableOnFade: Bool = false
     
     // UserDefaults keys
     enum UserDefaultsKeys {
@@ -32,6 +33,7 @@ enum Constants {
         static let blinkThreshold = "blinkThreshold"
         static let fadeColor = "fadeColor"
         static let eyeTrackingEnabled = "eyeTrackingEnabled"
+        static let autoDisableOnFade = "autoDisableOnFade"
         static let hasShownOnboarding = "hasShownOnboarding"
         static let earSensitivity = "earSensitivity"
         static let selectedCameraID = "selectedCameraID"

@@ -356,14 +356,19 @@ class FadeService: ObservableObject {
     }
     
     private func handleFadeTimeout() {
-        print("Fade timeout reached after \(fadeTimeoutInterval)s - disabling eye tracking")
-        
+        print("Fade timeout reached after \(fadeTimeoutInterval)s")
+
         // Remove fade
         removeFade()
-        
+
+        // Only disable eye tracking if the user opted in; otherwise the fade is
+        // purely a reminder and tracking stays on.
+        guard preferencesService.autoDisableOnFade else { return }
+
         // Disable eye tracking in preferences
         DispatchQueue.main.async {
             self.preferencesService.eyeTrackingEnabled = false
+            print("Disabled eye tracking after fade timeout (auto-disable enabled)")
         }
     }
 }

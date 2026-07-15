@@ -301,6 +301,13 @@ class StatusBarController {
         eyeTrackingItem.target = self
         menu.addItem(eyeTrackingItem)
         
+        // Auto-disable after fade toggle (off by default so tracking stays on)
+        let autoDisableItem = NSMenuItem(title: "Auto-disable after fade", action: #selector(toggleAutoDisableOnFade(_:)), keyEquivalent: "")
+        autoDisableItem.state = preferencesService.autoDisableOnFade ? .on : .off
+        autoDisableItem.target = self
+        autoDisableItem.toolTip = "If off, the screen fade is only a reminder and eye tracking stays on."
+        menu.addItem(autoDisableItem)
+        
         // Blink Threshold slider
         let blinkThresholdItem = NSMenuItem()
         let blinkThresholdView = BetterMenuSliderView(
@@ -519,7 +526,13 @@ class StatusBarController {
             self.preferencesService.eyeTrackingEnabled = false
         }
     }
-    
+
+    @objc private func toggleAutoDisableOnFade(_ sender: NSMenuItem) {
+        let enabled = sender.state != .on
+        sender.state = enabled ? .on : .off
+        self.preferencesService.autoDisableOnFade = enabled
+    }
+
     private func initializeEyeTracking() {
         // First check if we have camera permission
         PermissionsService.shared.checkCameraAccess { [weak self] granted in

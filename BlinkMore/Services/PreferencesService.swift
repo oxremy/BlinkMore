@@ -41,6 +41,7 @@ class PreferencesService: ObservableObject {
     
     @Published var fadeColor: NSColor = Constants.defaultFadeColor
     @Published var eyeTrackingEnabled: Bool = Constants.defaultEyeTrackingEnabled
+    @Published var autoDisableOnFade: Bool = Constants.defaultAutoDisableOnFade
     @Published var hasShownOnboarding: Bool = false
     @Published var selectedCameraID: String? = nil
     
@@ -90,6 +91,10 @@ class PreferencesService: ObservableObject {
         
         if let storedEyeTrackingEnabled = defaults.object(forKey: Constants.UserDefaultsKeys.eyeTrackingEnabled) as? Bool {
             eyeTrackingEnabled = storedEyeTrackingEnabled
+        }
+        
+        if let storedAutoDisableOnFade = defaults.object(forKey: Constants.UserDefaultsKeys.autoDisableOnFade) as? Bool {
+            autoDisableOnFade = storedAutoDisableOnFade
         }
         
         if let storedHasShownOnboarding = defaults.object(forKey: Constants.UserDefaultsKeys.hasShownOnboarding) as? Bool {
@@ -157,6 +162,13 @@ class PreferencesService: ObservableObject {
             .dropFirst()
             .sink { [weak self] newValue in
                 self?.defaults.set(newValue, forKey: Constants.UserDefaultsKeys.eyeTrackingEnabled)
+            }
+            .store(in: &cancellables)
+            
+        $autoDisableOnFade
+            .dropFirst()
+            .sink { [weak self] newValue in
+                self?.defaults.set(newValue, forKey: Constants.UserDefaultsKeys.autoDisableOnFade)
             }
             .store(in: &cancellables)
             
